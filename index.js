@@ -321,7 +321,7 @@ export async function onLoad(ctx) {
       const outputFilename = originalFilename.replace(/\.[^.]+$/, '') + '_compensated.nc';
 
       // Load the compensated G-code via API
-      const response = await fetch('http://localhost:3344/api/gcode-files/load-temp', {
+      const response = await fetch('http://localhost:8090/api/gcode-files/load-temp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -581,7 +581,7 @@ function showMainDialog(ctx, params) {
         function getApiBaseUrl() {
           if (typeof window !== 'undefined' && window.location) {
             if (window.location.port === '5174') {
-              return 'http://' + window.location.hostname + ':3344';
+              return 'http://' + window.location.hostname + ':8090';
             }
             return window.location.protocol + '//' + window.location.host;
           }
