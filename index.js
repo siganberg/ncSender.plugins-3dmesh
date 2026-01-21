@@ -577,6 +577,18 @@ function showMainDialog(ctx, params) {
         const convertToMetric = (value) => isImperial ? value * INCH_TO_MM : value;
         const convertToDisplay = (value) => isImperial ? value * MM_TO_INCH : value;
 
+        // Calculate API base URL (handle Vite dev server on port 5174)
+        function getApiBaseUrl() {
+          if (typeof window !== 'undefined' && window.location) {
+            if (window.location.port === '5174') {
+              return 'http://' + window.location.hostname + ':3344';
+            }
+            return window.location.protocol + '//' + window.location.host;
+          }
+          return '';
+        }
+        const API_BASE = getApiBaseUrl();
+
         // Mesh state
         let meshData = ${meshDataJson};
         let isProbing = false;
@@ -726,7 +738,7 @@ function showMainDialog(ctx, params) {
           };
 
           try {
-            await fetch('/api/plugins/com.ncsender.3dmesh/settings', {
+            await fetch(API_BASE + '/api/plugins/com.ncsender.3dmesh/settings', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(settings)
@@ -739,7 +751,7 @@ function showMainDialog(ctx, params) {
 
         // Send CNC command helper
         async function sendCommand(command) {
-          const response = await fetch('/api/cnc/send-command', {
+          const response = await fetch(API_BASE + '/api/cnc/send-command', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -885,7 +897,7 @@ function showMainDialog(ctx, params) {
               };
 
               // Save mesh to server
-              await fetch('/api/plugins/com.ncsender.3dmesh/settings', {
+              await fetch(API_BASE + '/api/plugins/com.ncsender.3dmesh/settings', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ meshData })
@@ -917,7 +929,7 @@ function showMainDialog(ctx, params) {
         document.getElementById('saveMeshBtn').addEventListener('click', async () => {
           if (!meshData) return;
           try {
-            await fetch('/api/plugins/com.ncsender.3dmesh/settings', {
+            await fetch(API_BASE + '/api/plugins/com.ncsender.3dmesh/settings', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ meshData, saveMeshFile: true })
@@ -931,7 +943,7 @@ function showMainDialog(ctx, params) {
         // Load mesh from file
         document.getElementById('loadMeshBtn').addEventListener('click', async () => {
           try {
-            const response = await fetch('/api/plugins/com.ncsender.3dmesh/settings');
+            const response = await fetch(API_BASE + '/api/plugins/com.ncsender.3dmesh/settings');
             const settings = await response.json();
             if (settings.meshData) {
               meshData = settings.meshData;
@@ -964,7 +976,7 @@ function showMainDialog(ctx, params) {
 
           try {
             // Save referenceZ and trigger compensation
-            await fetch('/api/plugins/com.ncsender.3dmesh/settings', {
+            await fetch(API_BASE + '/api/plugins/com.ncsender.3dmesh/settings', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ referenceZ, applyCompensation: true, meshData })
