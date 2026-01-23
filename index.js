@@ -337,7 +337,8 @@ export async function onLoad(ctx) {
       endX: savedSettings.endX ?? 100,
       endY: savedSettings.endY ?? 100,
       probeFeedRate: savedSettings.probeFeedRate ?? 100,
-      retractHeight: savedSettings.retractHeight ?? 5,
+      travelFeedRate: savedSettings.travelFeedRate ?? 2000,
+      clearanceHeight: savedSettings.clearanceHeight ?? 5,
       maxPlunge: savedSettings.maxPlunge ?? 20,
       referenceZ: savedSettings.referenceZ ?? 0
     };
@@ -423,13 +424,13 @@ function showMainDialog(ctx, params) {
     '3DMesh - Surface Probing',
     /* html */ `
     <style>
-      .mesh-dialog { padding: 20px 20px 10px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--color-text-primary); max-width: 700px; }
+      .mesh-dialog { padding: 20px 20px 10px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--color-text-primary); width: 750px; }
       .mesh-tabs { display: flex; gap: 2px; padding: 4px 16px 0 16px; background: var(--color-surface-muted); border: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
       .mesh-tab { all: unset; padding: 10px 20px; cursor: pointer; background: transparent !important; border: none !important; border-radius: 4px 4px 0 0 !important; color: var(--color-text-secondary) !important; font-size: 0.95rem; font-weight: 500; position: relative; transition: all 0.2s ease; margin-top: 4px; box-sizing: border-box; }
       .mesh-tab.active { background: var(--color-surface) !important; color: var(--color-text-primary) !important; box-shadow: 0 -2px 8px rgba(0,0,0,0.15); }
       .mesh-tab.active::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: var(--color-accent); border-radius: 2px 2px 0 0; }
       .mesh-tab:hover:not(.active) { background: var(--color-surface) !important; color: var(--color-text-primary) !important; transform: translateY(-1px); }
-      .mesh-panel { display: none; padding: 20px; border-left: 1px solid var(--color-border); border-right: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
+      .mesh-panel { display: none; padding: 20px; border-left: 1px solid var(--color-border); border-right: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); min-height: 520px; max-height: 520px; overflow-y: auto; }
       .mesh-panel.active { display: block; }
       .form-section { background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
       .form-section-title { font-weight: 600; margin-bottom: 12px; color: var(--color-text-primary); }
@@ -522,14 +523,20 @@ function showMainDialog(ctx, params) {
 
         <div class="form-section">
           <div class="form-section-title">Probe Settings</div>
-          <div class="form-row three-col">
+          <div class="form-row">
             <div class="form-group">
               <label>Probe Feed Rate (${feedUnit})</label>
               <input type="number" id="probeFeedRate" value="${settings.probeFeedRate}" min="1" max="1000">
             </div>
             <div class="form-group">
-              <label>Retract Height (${distanceUnit})</label>
-              <input type="number" id="retractHeight" value="${convertToDisplay(settings.retractHeight)}" min="0.1" step="0.1">
+              <label>Travel Feed Rate (${feedUnit})</label>
+              <input type="number" id="travelFeedRate" value="${settings.travelFeedRate || 2000}" min="100" max="5000">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Clearance Height (${distanceUnit})</label>
+              <input type="number" id="clearanceHeight" value="${convertToDisplay(settings.clearanceHeight || 5)}" min="1" step="0.5">
             </div>
             <div class="form-group">
               <label>Max Plunge (${distanceUnit})</label>
@@ -553,7 +560,8 @@ function showMainDialog(ctx, params) {
           <ul style="margin: 8px 0 0 20px; padding: 0;">
             <li>Ensure probe is connected and working</li>
             <li>Position spindle at the starting corner above the work</li>
-            <li>Current position will be used as the probe start point</li>
+            <li>Safe probing uses G38.3/G38.4 - no rapid G0 moves</li>
+            <li>Curved surfaces detected via lateral probe checks</li>
           </ul>
         </div>
 
@@ -800,7 +808,8 @@ function showMainDialog(ctx, params) {
             endX: convertToMetric(parseFloat(document.getElementById('endX').value)),
             endY: convertToMetric(parseFloat(document.getElementById('endY').value)),
             probeFeedRate: parseFloat(document.getElementById('probeFeedRate').value),
-            retractHeight: convertToMetric(parseFloat(document.getElementById('retractHeight').value)),
+            travelFeedRate: parseFloat(document.getElementById('travelFeedRate').value),
+            clearanceHeight: convertToMetric(parseFloat(document.getElementById('clearanceHeight').value)),
             maxPlunge: convertToMetric(parseFloat(document.getElementById('maxPlunge').value)),
             referenceZ: convertToMetric(parseFloat(document.getElementById('referenceZ').value))
           };
@@ -918,8 +927,9 @@ function showMainDialog(ctx, params) {
           const startY = convertToMetric(parseFloat(document.getElementById('startY').value));
           const endX = convertToMetric(parseFloat(document.getElementById('endX').value));
           const endY = convertToMetric(parseFloat(document.getElementById('endY').value));
-          const feedRate = parseFloat(document.getElementById('probeFeedRate').value);
-          const retractHeight = convertToMetric(parseFloat(document.getElementById('retractHeight').value));
+          const probeFeedRate = parseFloat(document.getElementById('probeFeedRate').value);
+          const travelFeedRate = parseFloat(document.getElementById('travelFeedRate').value);
+          const clearanceHeight = convertToMetric(parseFloat(document.getElementById('clearanceHeight').value));
           const maxPlunge = convertToMetric(parseFloat(document.getElementById('maxPlunge').value));
 
           const spacingX = (endX - startX) / (cols - 1);
@@ -951,51 +961,153 @@ function showMainDialog(ctx, params) {
               'Completed: ' + completedPoints + ' / ' + totalPoints + ' points';
           };
 
+          // Safe probe move - uses G38.3 (no error on no contact) for travel
+          // This is safer than G0 as it will stop if probe triggers
+          const safeMove = async (axis, value, feedRate) => {
+            const cmd = 'G38.3 ' + axis + value.toFixed(3) + ' F' + feedRate.toFixed(0);
+            await sendCommand(cmd);
+            await new Promise(r => setTimeout(r, 100));
+          };
+
+          // Safe retract using probe-away (G38.4) - moves away expecting trigger release
+          const safeRetract = async (targetZ, feedRate) => {
+            const cmd = 'G38.4 Z' + targetZ.toFixed(3) + ' F' + feedRate.toFixed(0);
+            await sendCommand(cmd);
+            await new Promise(r => setTimeout(r, 100));
+          };
+
           try {
             // Set absolute mode
             await sendCommand('G90');
             await new Promise(r => setTimeout(r, 100));
+
+            let lastProbedZ = null; // Track last probed Z for smart lateral moves
+            let rowHighestZ = null; // Track highest Z in current row for safe row transitions
+
+            // Probing strategy for curved surfaces:
+            // - Grid is probed left-to-right, front-to-back
+            // - After probing a point, retract clearanceHeight (5mm)
+            // - Move laterally with G38.3 (probe toward, no error)
+            // - If lateral probe triggers: surface found! Record Z, retract, continue lateral
+            // - If lateral probe doesn't trigger: do plunge probe (G38.2)
+            // - This handles both climbing and descending surfaces efficiently
 
             // Probe each point
             for (let r = 0; r < rows && !stopProbing; r++) {
               for (let c = 0; c < cols && !stopProbing; c++) {
                 const x = mesh[r][c].x;
                 const y = mesh[r][c].y;
+                const isFirstPoint = (r === 0 && c === 0);
+                let foundZ = null;
 
-                updateProgress('Moving to point (' + (r+1) + ',' + (c+1) + ')...');
+                updateProgress('Point (' + (r+1) + ',' + (c+1) + ')...');
 
-                // Move to XY position at safe height
-                await sendCommand('G0 Z' + retractHeight.toFixed(3));
-                await new Promise(r => setTimeout(r, 200));
-                await sendCommand('G0 X' + x.toFixed(3) + ' Y' + y.toFixed(3));
-                await new Promise(r => setTimeout(r, 500));
+                if (isFirstPoint) {
+                  // First point: move to XY position safely, then plunge probe
+                  const posResult = await queryProbeResult();
+                  const currentZ = posResult?.z || 0;
 
-                updateProgress('Probing point (' + (r+1) + ',' + (c+1) + ')...');
+                  // Retract to clearance if needed
+                  if (currentZ < clearanceHeight) {
+                    await safeRetract(clearanceHeight, travelFeedRate);
+                  }
 
-                // Probe down
-                const probeCmd = 'G38.2 Z-' + maxPlunge.toFixed(3) + ' F' + feedRate.toFixed(0);
+                  // Move to first XY position
+                  await safeMove('X', x, travelFeedRate);
+                  await safeMove('Y', y, travelFeedRate);
+
+                } else {
+                  // Subsequent points: use smart lateral probing for safe navigation
+
+                  let currentClearanceZ;
+
+                  // New row? Use highest Z from previous row + clearance for safe transition
+                  if (c === 0 && r > 0) {
+                    // Moving to new row - use highest Z from previous row
+                    currentClearanceZ = (rowHighestZ || lastProbedZ || 0) + clearanceHeight;
+                    console.log('[3DMesh] New row - using highest Z=' + (rowHighestZ || 0).toFixed(3) + ' + clearance');
+                    rowHighestZ = null; // Reset for new row
+                  } else {
+                    // Within same row - use last probed Z
+                    currentClearanceZ = (lastProbedZ || 0) + clearanceHeight;
+                  }
+
+                  await safeRetract(currentClearanceZ, travelFeedRate);
+
+                  // Lateral probe moves with bounce-on-hit strategy
+                  // This safely navigates over curved surfaces without crashing
+                  // G38.3 stops if probe triggers, then we bounce up and continue
+
+                  // New row: need to move both X (back to start) and Y (to next row)
+                  if (c === 0 && r > 0) {
+                    updateProgress('Moving to row ' + (r+1) + '...');
+
+                    // First move X back to start position
+                    await safeMove('X', x, travelFeedRate);
+                    let pos = await queryProbeResult();
+
+                    while (pos && Math.abs(pos.x - x) > 0.1 && !stopProbing) {
+                      console.log('[3DMesh] Lateral X hit at X=' + pos.x.toFixed(3) + ' Z=' + pos.z.toFixed(3) + ' - bouncing');
+                      currentClearanceZ = pos.z + clearanceHeight;
+                      await safeRetract(currentClearanceZ, travelFeedRate);
+                      await safeMove('X', x, travelFeedRate);
+                      pos = await queryProbeResult();
+                    }
+
+                    // Then move Y to next row
+                    await safeMove('Y', y, travelFeedRate);
+                    pos = await queryProbeResult();
+
+                    while (pos && Math.abs(pos.y - y) > 0.1 && !stopProbing) {
+                      console.log('[3DMesh] Lateral Y hit at Y=' + pos.y.toFixed(3) + ' Z=' + pos.z.toFixed(3) + ' - bouncing');
+                      currentClearanceZ = pos.z + clearanceHeight;
+                      await safeRetract(currentClearanceZ, travelFeedRate);
+                      await safeMove('Y', y, travelFeedRate);
+                      pos = await queryProbeResult();
+                    }
+                  } else if (c > 0) {
+                    // Within same row: just move X
+                    updateProgress('Moving to (' + (r+1) + ',' + (c+1) + ')...');
+                    await safeMove('X', x, travelFeedRate);
+
+                    let pos = await queryProbeResult();
+
+                    while (pos && Math.abs(pos.x - x) > 0.1 && !stopProbing) {
+                      console.log('[3DMesh] Lateral hit at X=' + pos.x.toFixed(3) + ' Z=' + pos.z.toFixed(3) + ' - bouncing');
+                      currentClearanceZ = pos.z + clearanceHeight;
+                      await safeRetract(currentClearanceZ, travelFeedRate);
+                      await safeMove('X', x, travelFeedRate);
+                      pos = await queryProbeResult();
+                    }
+                  }
+                }
+
+                // Always do plunge probe at target X,Y to get accurate Z measurement
+                updateProgress('Probing (' + (r+1) + ',' + (c+1) + ')...');
+
+                const probeCmd = 'G38.2 Z-' + maxPlunge.toFixed(3) + ' F' + probeFeedRate.toFixed(0);
                 await sendCommand(probeCmd);
 
-                // Wait for probe to complete and query result
                 try {
                   const prb = await queryProbeResult();
 
                   if (prb && prb.success) {
                     mesh[r][c].z = prb.z;
+                    lastProbedZ = prb.z;
+                    // Track highest Z in this row for safe row transitions
+                    if (rowHighestZ === null || prb.z > rowHighestZ) {
+                      rowHighestZ = prb.z;
+                    }
                     completedPoints++;
                     console.log('[3DMesh] Point (' + (r+1) + ',' + (c+1) + ') Z=' + prb.z.toFixed(3));
                   } else {
-                    throw new Error('Probe did not contact surface or failed to get result');
+                    throw new Error('Probe did not contact surface');
                   }
                 } catch (err) {
-                  updateProgress('Error at point (' + (r+1) + ',' + (c+1) + '): ' + err.message);
+                  updateProgress('Error at (' + (r+1) + ',' + (c+1) + '): ' + err.message);
                   stopProbing = true;
                   break;
                 }
-
-                // Retract
-                await sendCommand('G0 Z' + retractHeight.toFixed(3));
-                await new Promise(r => setTimeout(r, 200));
               }
             }
 
