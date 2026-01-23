@@ -109,9 +109,32 @@ function analyzeGCodeBounds(gcodeContent) {
 }
 
 // Bilinear interpolation for Z lookup
+// Handles special cases: single row (1xN), single column (Nx1)
 function interpolateZ(x, y, mesh, gridParams) {
   const { startX, startY, spacingX, spacingY, rows, cols } = gridParams;
 
+  // Single column (Nx1): linear interpolation in Y only
+  if (cols === 1) {
+    if (rows === 1) return mesh[0][0]?.z ?? 0;
+    const rowFloat = spacingY > 0 ? (y - startY) / spacingY : 0;
+    const row = Math.max(0, Math.min(rows - 2, Math.floor(rowFloat)));
+    const z0 = mesh[row][0]?.z ?? 0;
+    const z1 = mesh[row + 1]?.[0]?.z ?? z0;
+    const ty = Math.max(0, Math.min(1, rowFloat - row));
+    return z0 * (1 - ty) + z1 * ty;
+  }
+
+  // Single row (1xN): linear interpolation in X only
+  if (rows === 1) {
+    const colFloat = spacingX > 0 ? (x - startX) / spacingX : 0;
+    const col = Math.max(0, Math.min(cols - 2, Math.floor(colFloat)));
+    const z0 = mesh[0][col]?.z ?? 0;
+    const z1 = mesh[0][col + 1]?.z ?? z0;
+    const tx = Math.max(0, Math.min(1, colFloat - col));
+    return z0 * (1 - tx) + z1 * tx;
+  }
+
+  // Standard bilinear interpolation for 2D grid
   const colFloat = (x - startX) / spacingX;
   const rowFloat = (y - startY) / spacingY;
 
@@ -332,10 +355,8 @@ export async function onLoad(ctx) {
       gridMode: savedSettings.gridMode || 'manual',
       rows: savedSettings.rows ?? 5,
       cols: savedSettings.cols ?? 5,
-      startX: savedSettings.startX ?? 0,
-      startY: savedSettings.startY ?? 0,
-      endX: savedSettings.endX ?? 100,
-      endY: savedSettings.endY ?? 100,
+      sizeX: savedSettings.sizeX ?? 100,
+      sizeY: savedSettings.sizeY ?? 100,
       probeFeedRate: savedSettings.probeFeedRate ?? 100,
       travelFeedRate: savedSettings.travelFeedRate ?? 2000,
       clearanceHeight: savedSettings.clearanceHeight ?? 5,
@@ -487,9 +508,9 @@ function showMainDialog(ctx, params) {
             <div class="form-group">
               <label>Grid Size</label>
               <div style="display: flex; gap: 8px; align-items: center;">
-                <input type="number" id="cols" value="${settings.cols}" min="2" max="50" style="width: 60px;">
+                <input type="number" id="cols" value="${settings.cols}" min="1" max="50" style="width: 60px;">
                 <span>x</span>
-                <input type="number" id="rows" value="${settings.rows}" min="2" max="50" style="width: 60px;">
+                <input type="number" id="rows" value="${settings.rows}" min="1" max="50" style="width: 60px;">
                 <span>points</span>
               </div>
             </div>
@@ -497,24 +518,17 @@ function showMainDialog(ctx, params) {
           <div id="manualGridSettings">
             <div class="form-row">
               <div class="form-group">
-                <label>Start X (${distanceUnit})</label>
-                <input type="number" id="startX" value="${convertToDisplay(settings.startX)}" step="0.1">
+                <label>Size X (${distanceUnit})</label>
+                <input type="number" id="sizeX" value="${convertToDisplay(settings.sizeX)}" step="0.1" min="0">
               </div>
               <div class="form-group">
-                <label>End X (${distanceUnit})</label>
-                <input type="number" id="endX" value="${convertToDisplay(settings.endX)}" step="0.1">
+                <label>Size Y (${distanceUnit})</label>
+                <input type="number" id="sizeY" value="${convertToDisplay(settings.sizeY)}" step="0.1" min="0">
               </div>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>Start Y (${distanceUnit})</label>
-                <input type="number" id="startY" value="${convertToDisplay(settings.startY)}" step="0.1">
-              </div>
-              <div class="form-group">
-                <label>End Y (${distanceUnit})</label>
-                <input type="number" id="endY" value="${convertToDisplay(settings.endY)}" step="0.1">
-              </div>
-            </div>
+            <p class="info-text" style="margin: 8px 0; font-size: 12px; color: var(--color-text-secondary);">
+              Position machine at starting corner before probing. Grid probes from current position.
+            </p>
           </div>
           <div id="autoGridInfo" style="display: ${settings.gridMode === 'auto' ? 'block' : 'none'};">
             <div class="info-box"><strong>G-code Bounds:</strong> ${boundsInfo}</div>
@@ -560,7 +574,7 @@ function showMainDialog(ctx, params) {
           <ul style="margin: 8px 0 0 20px; padding: 0;">
             <li>Ensure probe is connected and working</li>
             <li>Position spindle at the starting corner above the work</li>
-            <li>Safe probing uses G38.3/G38.4 - no rapid G0 moves</li>
+            <li>Safe probing uses G38.3 for lateral moves, G1 for Z retracts</li>
             <li>Curved surfaces detected via lateral probe checks</li>
           </ul>
         </div>
@@ -790,10 +804,11 @@ function showMainDialog(ctx, params) {
           document.getElementById('autoGridInfo').style.display = isAuto ? 'block' : 'none';
 
           if (isAuto && gcodeBounds) {
-            document.getElementById('startX').value = convertToDisplay(gcodeBounds.min.x).toFixed(3);
-            document.getElementById('endX').value = convertToDisplay(gcodeBounds.max.x).toFixed(3);
-            document.getElementById('startY').value = convertToDisplay(gcodeBounds.min.y).toFixed(3);
-            document.getElementById('endY').value = convertToDisplay(gcodeBounds.max.y).toFixed(3);
+            // Calculate size from G-code bounds
+            const gcSizeX = gcodeBounds.max.x - gcodeBounds.min.x;
+            const gcSizeY = gcodeBounds.max.y - gcodeBounds.min.y;
+            document.getElementById('sizeX').value = convertToDisplay(gcSizeX).toFixed(3);
+            document.getElementById('sizeY').value = convertToDisplay(gcSizeY).toFixed(3);
           }
         });
 
@@ -803,10 +818,8 @@ function showMainDialog(ctx, params) {
             gridMode: document.getElementById('gridMode').value,
             rows: parseInt(document.getElementById('rows').value),
             cols: parseInt(document.getElementById('cols').value),
-            startX: convertToMetric(parseFloat(document.getElementById('startX').value)),
-            startY: convertToMetric(parseFloat(document.getElementById('startY').value)),
-            endX: convertToMetric(parseFloat(document.getElementById('endX').value)),
-            endY: convertToMetric(parseFloat(document.getElementById('endY').value)),
+            sizeX: convertToMetric(parseFloat(document.getElementById('sizeX').value)),
+            sizeY: convertToMetric(parseFloat(document.getElementById('sizeY').value)),
             probeFeedRate: parseFloat(document.getElementById('probeFeedRate').value),
             travelFeedRate: parseFloat(document.getElementById('travelFeedRate').value),
             clearanceHeight: convertToMetric(parseFloat(document.getElementById('clearanceHeight').value)),
@@ -923,17 +936,36 @@ function showMainDialog(ctx, params) {
 
           const rows = parseInt(document.getElementById('rows').value);
           const cols = parseInt(document.getElementById('cols').value);
-          const startX = convertToMetric(parseFloat(document.getElementById('startX').value));
-          const startY = convertToMetric(parseFloat(document.getElementById('startY').value));
-          const endX = convertToMetric(parseFloat(document.getElementById('endX').value));
-          const endY = convertToMetric(parseFloat(document.getElementById('endY').value));
+          const sizeX = convertToMetric(parseFloat(document.getElementById('sizeX').value));
+          const sizeY = convertToMetric(parseFloat(document.getElementById('sizeY').value));
           const probeFeedRate = parseFloat(document.getElementById('probeFeedRate').value);
           const travelFeedRate = parseFloat(document.getElementById('travelFeedRate').value);
           const clearanceHeight = convertToMetric(parseFloat(document.getElementById('clearanceHeight').value));
           const maxPlunge = convertToMetric(parseFloat(document.getElementById('maxPlunge').value));
 
-          const spacingX = (endX - startX) / (cols - 1);
-          const spacingY = (endY - startY) / (rows - 1);
+          // Handle single row/column - spacing is 0, all points at start position
+          const spacingX = cols > 1 ? sizeX / (cols - 1) : 0;
+          const spacingY = rows > 1 ? sizeY / (rows - 1) : 0;
+
+          // Validate all parameters before starting
+          const params = { rows, cols, sizeX, sizeY, spacingX, spacingY, probeFeedRate, travelFeedRate, clearanceHeight, maxPlunge };
+          const invalidParams = Object.entries(params).filter(([k, v]) => isNaN(v) || v === null || v === undefined);
+          if (invalidParams.length > 0) {
+            alert('Invalid parameters: ' + invalidParams.map(([k, v]) => k + '=' + v).join(', '));
+            return;
+          }
+
+          if (cols < 1 || rows < 1) {
+            alert('Grid must have at least 1 point in each direction');
+            return;
+          }
+
+          if (cols === 1 && rows === 1) {
+            alert('Grid must have more than 1 point total');
+            return;
+          }
+
+          console.log('[3DMesh] Starting probe with params:', JSON.stringify(params));
 
           isProbing = true;
           stopProbing = false;
@@ -946,14 +978,6 @@ function showMainDialog(ctx, params) {
           let completedPoints = 0;
           const mesh = [];
 
-          // Initialize mesh array
-          for (let r = 0; r < rows; r++) {
-            mesh[r] = [];
-            for (let c = 0; c < cols; c++) {
-              mesh[r][c] = { x: startX + c * spacingX, y: startY + r * spacingY, z: null };
-            }
-          }
-
           const updateProgress = (message) => {
             document.getElementById('probeStatus').textContent = message;
             document.getElementById('progressFill').style.width = (completedPoints / totalPoints * 100) + '%';
@@ -964,14 +988,21 @@ function showMainDialog(ctx, params) {
           // Safe probe move - uses G38.3 (no error on no contact) for travel
           // This is safer than G0 as it will stop if probe triggers
           const safeMove = async (axis, value, feedRate) => {
+            if (isNaN(value) || isNaN(feedRate)) {
+              throw new Error('Invalid value in safeMove: axis=' + axis + ' value=' + value + ' feedRate=' + feedRate);
+            }
             const cmd = 'G38.3 ' + axis + value.toFixed(3) + ' F' + feedRate.toFixed(0);
             await sendCommand(cmd);
             await new Promise(r => setTimeout(r, 100));
           };
 
-          // Safe retract using probe-away (G38.4) - moves away expecting trigger release
+          // Safe retract - use G1 for upward Z moves (no crash risk going up)
+          // G38.4 requires probe to be triggered first, which isn't always the case
           const safeRetract = async (targetZ, feedRate) => {
-            const cmd = 'G38.4 Z' + targetZ.toFixed(3) + ' F' + feedRate.toFixed(0);
+            if (isNaN(targetZ) || isNaN(feedRate)) {
+              throw new Error('Invalid value in safeRetract: targetZ=' + targetZ + ' feedRate=' + feedRate);
+            }
+            const cmd = 'G1 Z' + targetZ.toFixed(3) + ' F' + feedRate.toFixed(0);
             await sendCommand(cmd);
             await new Promise(r => setTimeout(r, 100));
           };
@@ -981,8 +1012,26 @@ function showMainDialog(ctx, params) {
             await sendCommand('G90');
             await new Promise(r => setTimeout(r, 100));
 
+            // Capture actual starting position before probing
+            const startPos = await queryProbeResult();
+            if (!startPos || startPos.x === undefined || startPos.y === undefined) {
+              throw new Error('Could not read machine position. Make sure machine is connected.');
+            }
+            const actualStartX = startPos.x;
+            const actualStartY = startPos.y;
+            console.log('[3DMesh] Starting position: X=' + actualStartX.toFixed(3) + ' Y=' + actualStartY.toFixed(3));
+
+            // Initialize mesh array with actual positions
+            for (let r = 0; r < rows; r++) {
+              mesh[r] = [];
+              for (let c = 0; c < cols; c++) {
+                mesh[r][c] = { x: actualStartX + c * spacingX, y: actualStartY + r * spacingY, z: null };
+              }
+            }
+
             let lastProbedZ = null; // Track last probed Z for smart lateral moves
             let rowHighestZ = null; // Track highest Z in current row for safe row transitions
+            let meshHighestZ = null; // Track highest Z in entire mesh for final retract
 
             // Probing strategy for curved surfaces:
             // - Grid is probed left-to-right, front-to-back
@@ -995,44 +1044,33 @@ function showMainDialog(ctx, params) {
             // Probe each point
             for (let r = 0; r < rows && !stopProbing; r++) {
               for (let c = 0; c < cols && !stopProbing; c++) {
-                const x = mesh[r][c].x;
-                const y = mesh[r][c].y;
+                // Calculate actual probe positions relative to where user started
+                const x = actualStartX + c * spacingX;
+                const y = actualStartY + r * spacingY;
                 const isFirstPoint = (r === 0 && c === 0);
                 let foundZ = null;
 
                 updateProgress('Point (' + (r+1) + ',' + (c+1) + ')...');
 
                 if (isFirstPoint) {
-                  // First point: move to XY position safely, then plunge probe
-                  const posResult = await queryProbeResult();
-                  const currentZ = posResult?.z || 0;
-
-                  // Retract to clearance if needed
-                  if (currentZ < clearanceHeight) {
-                    await safeRetract(clearanceHeight, travelFeedRate);
-                  }
-
-                  // Move to first XY position
-                  await safeMove('X', x, travelFeedRate);
-                  await safeMove('Y', y, travelFeedRate);
+                  // First point: user should already be at starting position
+                  // Just probe down - no lateral movement needed
+                  console.log('[3DMesh] First point - probing at current position');
 
                 } else {
                   // Subsequent points: use smart lateral probing for safe navigation
+                  // We're already at clearance height (retracted after previous probe)
 
-                  let currentClearanceZ;
+                  let currentClearanceZ = (lastProbedZ || 0) + clearanceHeight;
 
-                  // New row? Use highest Z from previous row + clearance for safe transition
+                  // New row? Need to retract to highest Z from previous row for safe transition
                   if (c === 0 && r > 0) {
-                    // Moving to new row - use highest Z from previous row
                     currentClearanceZ = (rowHighestZ || lastProbedZ || 0) + clearanceHeight;
-                    console.log('[3DMesh] New row - using highest Z=' + (rowHighestZ || 0).toFixed(3) + ' + clearance');
+                    console.log('[3DMesh] New row - retracting to highest Z=' + (rowHighestZ || 0).toFixed(3) + ' + clearance');
+                    await safeRetract(currentClearanceZ, travelFeedRate);
                     rowHighestZ = null; // Reset for new row
-                  } else {
-                    // Within same row - use last probed Z
-                    currentClearanceZ = (lastProbedZ || 0) + clearanceHeight;
                   }
-
-                  await safeRetract(currentClearanceZ, travelFeedRate);
+                  // Within same row: already at clearance from previous probe retract, no need to retract again
 
                   // Lateral probe moves with bounce-on-hit strategy
                   // This safely navigates over curved surfaces without crashing
@@ -1042,15 +1080,15 @@ function showMainDialog(ctx, params) {
                   if (c === 0 && r > 0) {
                     updateProgress('Moving to row ' + (r+1) + '...');
 
-                    // First move X back to start position
-                    await safeMove('X', x, travelFeedRate);
+                    // First move X back to actual start position
+                    await safeMove('X', actualStartX, travelFeedRate);
                     let pos = await queryProbeResult();
 
-                    while (pos && Math.abs(pos.x - x) > 0.1 && !stopProbing) {
+                    while (pos && Math.abs(pos.x - actualStartX) > 0.1 && !stopProbing) {
                       console.log('[3DMesh] Lateral X hit at X=' + pos.x.toFixed(3) + ' Z=' + pos.z.toFixed(3) + ' - bouncing');
                       currentClearanceZ = pos.z + clearanceHeight;
                       await safeRetract(currentClearanceZ, travelFeedRate);
-                      await safeMove('X', x, travelFeedRate);
+                      await safeMove('X', actualStartX, travelFeedRate);
                       pos = await queryProbeResult();
                     }
 
@@ -1092,14 +1130,27 @@ function showMainDialog(ctx, params) {
                   const prb = await queryProbeResult();
 
                   if (prb && prb.success) {
+                    // Store actual probed position (x, y calculated from actual start)
+                    mesh[r][c].x = x;
+                    mesh[r][c].y = y;
                     mesh[r][c].z = prb.z;
                     lastProbedZ = prb.z;
                     // Track highest Z in this row for safe row transitions
                     if (rowHighestZ === null || prb.z > rowHighestZ) {
                       rowHighestZ = prb.z;
                     }
+                    // Track highest Z in entire mesh for final retract
+                    if (meshHighestZ === null || prb.z > meshHighestZ) {
+                      meshHighestZ = prb.z;
+                    }
                     completedPoints++;
                     console.log('[3DMesh] Point (' + (r+1) + ',' + (c+1) + ') Z=' + prb.z.toFixed(3));
+
+                    // Immediately retract 5mm above this probe point
+                    // This ensures we're always at clearance height before the next lateral move
+                    const postProbeClearance = prb.z + clearanceHeight;
+                    await safeRetract(postProbeClearance, travelFeedRate);
+                    console.log('[3DMesh] Retracted to Z=' + postProbeClearance.toFixed(3));
                   } else {
                     throw new Error('Probe did not contact surface');
                   }
@@ -1111,10 +1162,25 @@ function showMainDialog(ctx, params) {
               }
             }
 
+            // Final retract - move to highest point + clearance for safe clearance
+            if (meshHighestZ !== null) {
+              const finalRetractZ = meshHighestZ + clearanceHeight;
+              console.log('[3DMesh] Final retract to highest Z=' + meshHighestZ.toFixed(3) + ' + clearance = ' + finalRetractZ.toFixed(3));
+              await safeRetract(finalRetractZ, travelFeedRate);
+
+              // Return to starting position using G38.3 for safe movement
+              console.log('[3DMesh] Returning to start position X=' + actualStartX.toFixed(3) + ' Y=' + actualStartY.toFixed(3));
+              await safeMove('X', actualStartX, travelFeedRate);
+              await safeMove('Y', actualStartY, travelFeedRate);
+            }
+
             if (!stopProbing && completedPoints === totalPoints) {
+              // Use actual start positions for gridParams so Z compensation works correctly
+              const actualEndX = actualStartX + (cols - 1) * spacingX;
+              const actualEndY = actualStartY + (rows - 1) * spacingY;
               meshData = {
                 mesh,
-                gridParams: { rows, cols, startX, startY, endX, endY, spacingX, spacingY }
+                gridParams: { rows, cols, startX: actualStartX, startY: actualStartY, endX: actualEndX, endY: actualEndY, spacingX, spacingY }
               };
 
               // Save mesh to server
