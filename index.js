@@ -851,7 +851,12 @@ function showMainDialog(ctx, params) {
               meta: { sourceId: 'plugin', plugin: 'com.ncsender.3dmesh' }
             })
           });
-          return response.json();
+          const result = await response.json();
+          if (result.error || result.success === false) {
+            const errorMsg = result.error?.message || result.error || 'Unknown error';
+            throw new Error('Command failed: ' + errorMsg);
+          }
+          return result;
         }
 
         // Parse position string "X,Y,Z,A" to object
@@ -864,29 +869,46 @@ function showMainDialog(ctx, params) {
           return null;
         }
 
+        // Wait for machine to be idle (motion complete)
+        async function waitForIdle(maxWaitMs = 10000) {
+          const startTime = Date.now();
+          while (Date.now() - startTime < maxWaitMs) {
+            await new Promise(r => setTimeout(r, 100));
+            try {
+              const response = await fetch(API_BASE + '/api/server-state');
+              const state = await response.json();
+              const ms = state?.machineState;
+              const status = ms?.status;
+              if (status === 'Idle') {
+                return true;
+              }
+              if (status === 'Alarm') {
+                throw new Error('Machine in alarm state');
+              }
+            } catch (err) {
+              console.log('[3DMesh] Error checking state:', err.message);
+            }
+          }
+          console.log('[3DMesh] Warning: Timeout waiting for idle');
+          return false;
+        }
+
         // Query probe result by reading current machine position
         // After probing, machine stays at contact point
         async function queryProbeResult() {
-          // Wait for probe motion to complete
-          await new Promise(r => setTimeout(r, 800));
-
-          // Query current position
-          await fetch(API_BASE + '/api/send-command', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              command: '?',
-              meta: { sourceId: 'plugin', plugin: 'com.ncsender.3dmesh' }
-            })
-          });
-
-          // Wait for status to update
-          await new Promise(r => setTimeout(r, 200));
+          // Wait for motion to complete
+          await waitForIdle();
 
           // Get current machine state
           const stateResponse = await fetch(API_BASE + '/api/server-state');
           const state = await stateResponse.json();
-          const ms = state?.machineState;
+          // Handle both possible state structures
+          const ms = state?.machineState || state?.cnc?.machineState;
+
+          if (!ms) {
+            console.log('[3DMesh] Warning: No machine state available');
+            return null;
+          }
 
           // Try WPos first (work position), then MPos (machine position) with WCO offset
           const wposStr = ms?.WPos;
@@ -1134,7 +1156,15 @@ function showMainDialog(ctx, params) {
                     mesh[r][c].x = x;
                     mesh[r][c].y = y;
                     mesh[r][c].z = prb.z;
+
+                    // Smart clearance: if surface is descending, use minimal clearance (1mm)
+                    // If surface is ascending or first point, use full clearance
+                    const isDescending = lastProbedZ !== null && prb.z < lastProbedZ;
+                    const smartClearance = isDescending ? 1 : clearanceHeight;
+
+                    // Now update lastProbedZ after the comparison
                     lastProbedZ = prb.z;
+
                     // Track highest Z in this row for safe row transitions
                     if (rowHighestZ === null || prb.z > rowHighestZ) {
                       rowHighestZ = prb.z;
@@ -1144,13 +1174,11 @@ function showMainDialog(ctx, params) {
                       meshHighestZ = prb.z;
                     }
                     completedPoints++;
-                    console.log('[3DMesh] Point (' + (r+1) + ',' + (c+1) + ') Z=' + prb.z.toFixed(3));
+                    console.log('[3DMesh] Point (' + (r+1) + ',' + (c+1) + ') Z=' + prb.z.toFixed(3) + (isDescending ? ' (descending)' : ' (ascending)'));
 
-                    // Immediately retract 5mm above this probe point
-                    // This ensures we're always at clearance height before the next lateral move
-                    const postProbeClearance = prb.z + clearanceHeight;
+                    const postProbeClearance = prb.z + smartClearance;
                     await safeRetract(postProbeClearance, travelFeedRate);
-                    console.log('[3DMesh] Retracted to Z=' + postProbeClearance.toFixed(3));
+                    console.log('[3DMesh] Retracted to Z=' + postProbeClearance.toFixed(3) + ' (clearance: ' + smartClearance + 'mm)');
                   } else {
                     throw new Error('Probe did not contact surface');
                   }
@@ -1162,19 +1190,18 @@ function showMainDialog(ctx, params) {
               }
             }
 
-            // Final retract - move to highest point + clearance for safe clearance
-            if (meshHighestZ !== null) {
-              const finalRetractZ = meshHighestZ + clearanceHeight;
-              console.log('[3DMesh] Final retract to highest Z=' + meshHighestZ.toFixed(3) + ' + clearance = ' + finalRetractZ.toFixed(3));
-              await safeRetract(finalRetractZ, travelFeedRate);
-
-              // Return to starting position using G38.3 for safe movement
-              console.log('[3DMesh] Returning to start position X=' + actualStartX.toFixed(3) + ' Y=' + actualStartY.toFixed(3));
-              await safeMove('X', actualStartX, travelFeedRate);
-              await safeMove('Y', actualStartY, travelFeedRate);
-            }
-
             if (!stopProbing && completedPoints === totalPoints) {
+              // Final retract - move to highest point + clearance for safe clearance
+              if (meshHighestZ !== null) {
+                const finalRetractZ = meshHighestZ + clearanceHeight;
+                console.log('[3DMesh] Final retract to highest Z=' + meshHighestZ.toFixed(3) + ' + clearance = ' + finalRetractZ.toFixed(3));
+                await safeRetract(finalRetractZ, travelFeedRate);
+
+                // Return to starting position using G38.3 for safe movement
+                console.log('[3DMesh] Returning to start position X=' + actualStartX.toFixed(3) + ' Y=' + actualStartY.toFixed(3));
+                await safeMove('X', actualStartX, travelFeedRate);
+                await safeMove('Y', actualStartY, travelFeedRate);
+              }
               // Use actual start positions for gridParams so Z compensation works correctly
               const actualEndX = actualStartX + (cols - 1) * spacingX;
               const actualEndY = actualStartY + (rows - 1) * spacingY;
@@ -1205,11 +1232,10 @@ function showMainDialog(ctx, params) {
         });
 
         // Stop probing
-        document.getElementById('stopProbeBtn').addEventListener('click', async () => {
+        document.getElementById('stopProbeBtn').addEventListener('click', () => {
           stopProbing = true;
-          await sendCommand('!'); // Feed hold
-          await new Promise(r => setTimeout(r, 100));
-          await sendCommand('\\x18'); // Soft reset
+          // Just set the flag - let the probing loop exit gracefully
+          // Don't send feed hold or reset as it can cause alarms
         });
 
         // Save mesh to file
