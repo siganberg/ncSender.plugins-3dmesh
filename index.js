@@ -218,6 +218,10 @@ async function loadMeshFromFile() {
   };
 }
 
+// Track last processed timestamp to avoid reprocessing
+let lastProcessedTimestamp = 0;
+let checkIntervalId = null;
+
 export async function onLoad(ctx) {
   ctx.log('3DMesh plugin loaded');
 
@@ -230,6 +234,95 @@ export async function onLoad(ctx) {
   } catch (error) {
     // No saved mesh, that's fine
   }
+
+  // Periodically check for applyCompensation flag in settings
+  const checkInterval = setInterval(async () => {
+    try {
+      const settings = ctx.getSettings() || {};
+
+      // Check if there's a pending apply request
+      if (settings.applyCompensation && settings.applyTimestamp && settings.applyTimestamp > lastProcessedTimestamp) {
+        ctx.log('Processing applyCompensation request, timestamp:', settings.applyTimestamp);
+        lastProcessedTimestamp = settings.applyTimestamp;
+
+        // Get mesh data from settings or use stored mesh
+        const mesh = settings.meshData?.mesh || currentMesh;
+        const gridParams = settings.meshData?.gridParams || meshGridParams;
+
+        if (!mesh || !gridParams) {
+          ctx.log('No mesh data available for compensation');
+          ctx.setSettings({
+            ...settings,
+            applyCompensation: false,
+            lastApplyResult: { success: false, error: 'No mesh data available' }
+          });
+          return;
+        }
+
+        // Update in-memory mesh
+        if (settings.meshData) {
+          currentMesh = settings.meshData.mesh;
+          meshGridParams = settings.meshData.gridParams;
+        }
+
+        try {
+          const cacheFilePath = path.join(getUserDataDir(), 'gcode-cache', 'current.gcode');
+          const gcodeContent = await fs.readFile(cacheFilePath, 'utf8');
+
+          const referenceZ = settings.referenceZ ?? 0;
+          ctx.log('Applying Z compensation with referenceZ:', referenceZ);
+          ctx.log('Grid:', gridParams.cols, 'x', gridParams.rows);
+
+          const compensatedGcode = applyZCompensation(gcodeContent, mesh, gridParams, referenceZ);
+
+          const serverState = ctx.getServerState();
+          const originalFilename = serverState?.jobLoaded?.filename || 'program.nc';
+          const outputFilename = originalFilename.replace(/\.[^.]+$/, '') + '_compensated.nc';
+
+          ctx.log('Loading compensated file:', outputFilename);
+
+          // Load the compensated G-code via API
+          const response = await fetch('http://localhost:8090/api/gcode-files/load-temp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: compensatedGcode,
+              filename: outputFilename,
+              sourceFile: originalFilename
+            })
+          });
+
+          if (response.ok) {
+            ctx.log('Compensation applied successfully');
+            ctx.setSettings({
+              ...settings,
+              applyCompensation: false,
+              lastApplyResult: { success: true, filename: outputFilename }
+            });
+          } else {
+            ctx.log('Failed to load compensated file:', response.status);
+            ctx.setSettings({
+              ...settings,
+              applyCompensation: false,
+              lastApplyResult: { success: false, error: 'Failed to load compensated file' }
+            });
+          }
+        } catch (error) {
+          ctx.log('Apply compensation error:', error.message);
+          ctx.setSettings({
+            ...settings,
+            applyCompensation: false,
+            lastApplyResult: { success: false, error: error.message }
+          });
+        }
+      }
+    } catch (error) {
+      // Ignore check errors
+    }
+  }, 500); // Check every 500ms
+
+  // Store interval for cleanup
+  checkIntervalId = checkInterval;
 
   ctx.registerToolMenu('3DMesh', async () => {
     ctx.log('3DMesh tool clicked');
@@ -302,45 +395,6 @@ export async function onLoad(ctx) {
     }
   });
 
-  // Listen for apply compensation requests
-  ctx.onWebSocketEvent('plugin:3dmesh:apply-compensation', async (data) => {
-    if (!currentMesh || !meshGridParams) {
-      ctx.broadcast('plugin:3dmesh:compensation-result', { success: false, error: 'No mesh data' });
-      return;
-    }
-
-    try {
-      const cacheFilePath = path.join(getUserDataDir(), 'gcode-cache', 'current.gcode');
-      const gcodeContent = await fs.readFile(cacheFilePath, 'utf8');
-
-      const referenceZ = data.referenceZ ?? 0;
-      const compensatedGcode = applyZCompensation(gcodeContent, currentMesh, meshGridParams, referenceZ);
-
-      const serverState = ctx.getServerState();
-      const originalFilename = serverState?.jobLoaded?.filename || 'program.nc';
-      const outputFilename = originalFilename.replace(/\.[^.]+$/, '') + '_compensated.nc';
-
-      // Load the compensated G-code via API
-      const response = await fetch('http://localhost:8090/api/gcode-files/load-temp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: compensatedGcode,
-          filename: outputFilename,
-          sourceFile: originalFilename
-        })
-      });
-
-      if (response.ok) {
-        ctx.broadcast('plugin:3dmesh:compensation-result', { success: true, filename: outputFilename });
-      } else {
-        ctx.broadcast('plugin:3dmesh:compensation-result', { success: false, error: 'Failed to load compensated file' });
-      }
-    } catch (error) {
-      ctx.log('Apply compensation error:', error);
-      ctx.broadcast('plugin:3dmesh:compensation-result', { success: false, error: error.message });
-    }
-  });
 }
 
 function showMainDialog(ctx, params) {
@@ -369,12 +423,13 @@ function showMainDialog(ctx, params) {
     '3DMesh - Surface Probing',
     /* html */ `
     <style>
-      .mesh-dialog { padding: 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--color-text-primary); max-width: 700px; }
-      .mesh-tabs { display: flex; border-bottom: 1px solid var(--color-border); margin-bottom: 20px; }
-      .mesh-tab { padding: 10px 20px; cursor: pointer; border: none; background: none; color: var(--color-text-secondary); font-size: 0.95rem; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -1px; }
-      .mesh-tab.active { color: var(--color-accent); border-bottom-color: var(--color-accent); }
-      .mesh-tab:hover:not(.active) { color: var(--color-text-primary); }
-      .mesh-panel { display: none; }
+      .mesh-dialog { padding: 20px 20px 10px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--color-text-primary); max-width: 700px; }
+      .mesh-tabs { display: flex; gap: 2px; padding: 4px 16px 0 16px; background: var(--color-surface-muted); border: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
+      .mesh-tab { all: unset; padding: 10px 20px; cursor: pointer; background: transparent !important; border: none !important; border-radius: 4px 4px 0 0 !important; color: var(--color-text-secondary) !important; font-size: 0.95rem; font-weight: 500; position: relative; transition: all 0.2s ease; margin-top: 4px; box-sizing: border-box; }
+      .mesh-tab.active { background: var(--color-surface) !important; color: var(--color-text-primary) !important; box-shadow: 0 -2px 8px rgba(0,0,0,0.15); }
+      .mesh-tab.active::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: var(--color-accent); border-radius: 2px 2px 0 0; }
+      .mesh-tab:hover:not(.active) { background: var(--color-surface) !important; color: var(--color-text-primary) !important; transform: translateY(-1px); }
+      .mesh-panel { display: none; padding: 20px; border-left: 1px solid var(--color-border); border-right: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
       .mesh-panel.active { display: block; }
       .form-section { background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
       .form-section-title { font-weight: 600; margin-bottom: 12px; color: var(--color-text-primary); }
@@ -390,7 +445,8 @@ function showMainDialog(ctx, params) {
       .mesh-status { display: flex; align-items: center; gap: 8px; }
       .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #666; }
       .status-dot.active { background: #4caf50; }
-      .button-row { display: flex; justify-content: center; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-border); }
+      .button-row { display: flex; justify-content: center; gap: 10px; margin-top: 16px; padding: 16px 20px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; }
+      .button-row.inline { background: transparent; border: none; padding: 0; margin-top: 16px; }
       .btn { padding: 10px 24px; border-radius: 4px; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: background-color 0.2s; border: none; }
       .btn-secondary { background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text-primary); }
       .btn-secondary:hover { background: var(--color-surface-muted); }
@@ -512,7 +568,7 @@ function showMainDialog(ctx, params) {
           </div>
         </div>
 
-        <div class="button-row" style="border: none; margin-top: 0;">
+        <div class="button-row inline">
           <button class="btn btn-primary" id="startProbeBtn">Start Probing</button>
           <button class="btn btn-danger" id="stopProbeBtn" style="display: none;">Stop</button>
         </div>
@@ -520,6 +576,13 @@ function showMainDialog(ctx, params) {
 
       <!-- Mesh Data Tab -->
       <div class="mesh-panel" id="panel-mesh">
+        <div class="info-box">
+          <div class="mesh-status">
+            <span class="status-dot" id="meshStatusDot"></span>
+            <span id="meshStatusText">Checking...</span>
+          </div>
+        </div>
+
         <div class="form-section">
           <div class="form-section-title">Mesh Data</div>
           <div id="meshDataDisplay" style="max-height: 300px; overflow: auto;">
@@ -529,7 +592,7 @@ function showMainDialog(ctx, params) {
 
         <div id="meshStatsDisplay" class="info-box" style="display: none;"></div>
 
-        <div class="button-row" style="border: none; margin-top: 0;">
+        <div class="button-row inline">
           <button class="btn btn-secondary" id="saveMeshBtn" disabled>Save to File</button>
           <button class="btn btn-secondary" id="loadMeshBtn">Load from File</button>
           <button class="btn btn-secondary" id="clearMeshBtn" disabled>Clear</button>
@@ -556,7 +619,7 @@ function showMainDialog(ctx, params) {
           </div>
         </div>
 
-        <div class="button-row" style="border: none; margin-top: 0;">
+        <div class="button-row inline">
           <button class="btn btn-success" id="applyCompensationBtn" disabled>Apply Z Compensation</button>
         </div>
       </div>
@@ -577,17 +640,22 @@ function showMainDialog(ctx, params) {
         const convertToMetric = (value) => isImperial ? value * INCH_TO_MM : value;
         const convertToDisplay = (value) => isImperial ? value * MM_TO_INCH : value;
 
-        // Calculate API base URL (handle Vite dev server on port 5174)
-        function getApiBaseUrl() {
-          if (typeof window !== 'undefined' && window.location) {
-            if (window.location.port === '5174') {
-              return 'http://' + window.location.hostname + ':8090';
-            }
-            return window.location.protocol + '//' + window.location.host;
+        // Calculate API base URL
+        // When on Vite dev server (5174), API is on port 8090
+        // When in production, use relative URLs
+        const API_BASE = (function() {
+          const port = window.location.port;
+          const hostname = window.location.hostname;
+          const protocol = window.location.protocol;
+          console.log('[3DMesh] Detecting API base - port:', port, 'hostname:', hostname);
+          if (port === '5174') {
+            const base = protocol + '//' + hostname + ':8090';
+            console.log('[3DMesh] Using dev API base:', base);
+            return base;
           }
+          console.log('[3DMesh] Using relative API base (production)');
           return '';
-        }
-        const API_BASE = getApiBaseUrl();
+        })();
 
         // Mesh state
         let meshData = ${meshDataJson};
@@ -751,7 +819,9 @@ function showMainDialog(ctx, params) {
 
         // Send CNC command helper
         async function sendCommand(command) {
-          const response = await fetch(API_BASE + '/api/cnc/send-command', {
+          const url = API_BASE + '/api/send-command';
+          console.log('[3DMesh] sendCommand URL:', url, 'command:', command);
+          const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -762,40 +832,79 @@ function showMainDialog(ctx, params) {
           return response.json();
         }
 
-        // Wait for specific response pattern
-        function waitForResponse(pattern, timeout = 10000) {
-          return new Promise((resolve, reject) => {
-            const timeoutId = setTimeout(() => {
-              window.removeEventListener('message', handler);
-              reject(new Error('Timeout waiting for response'));
-            }, timeout);
-
-            const handler = (event) => {
-              if (event.data?.type === 'cnc-data') {
-                const data = event.data.data;
-                if (typeof data === 'string' && pattern.test(data)) {
-                  clearTimeout(timeoutId);
-                  window.removeEventListener('message', handler);
-                  resolve(data);
-                }
-              }
-            };
-
-            window.addEventListener('message', handler);
-          });
+        // Parse position string "X,Y,Z,A" to object
+        function parsePositionString(posStr) {
+          if (!posStr || typeof posStr !== 'string') return null;
+          const parts = posStr.split(',').map(v => parseFloat(v.trim()));
+          if (parts.length >= 3 && parts.every(v => !isNaN(v))) {
+            return { x: parts[0], y: parts[1], z: parts[2] };
+          }
+          return null;
         }
 
-        // Parse PRB response
-        function parsePRB(response) {
-          const match = response.match(/\\[PRB:([+-]?[\\d.]+),([+-]?[\\d.]+),([+-]?[\\d.]+):([01])\\]/);
-          if (match) {
-            return {
-              x: parseFloat(match[1]),
-              y: parseFloat(match[2]),
-              z: parseFloat(match[3]),
-              success: match[4] === '1'
-            };
+        // Query probe result by reading current machine position
+        // After probing, machine stays at contact point
+        async function queryProbeResult() {
+          // Wait for probe motion to complete
+          await new Promise(r => setTimeout(r, 800));
+
+          // Query current position
+          await fetch(API_BASE + '/api/send-command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              command: '?',
+              meta: { sourceId: 'plugin', plugin: 'com.ncsender.3dmesh' }
+            })
+          });
+
+          // Wait for status to update
+          await new Promise(r => setTimeout(r, 200));
+
+          // Get current machine state
+          const stateResponse = await fetch(API_BASE + '/api/server-state');
+          const state = await stateResponse.json();
+          const ms = state?.machineState;
+
+          // Try WPos first (work position), then MPos (machine position) with WCO offset
+          const wposStr = ms?.WPos;
+          const mposStr = ms?.MPos;
+          const wcoStr = ms?.WCO;
+
+          // Parse WPos if available
+          if (wposStr) {
+            const wpos = parsePositionString(wposStr);
+            if (wpos) {
+              console.log('[3DMesh] Probe position from WPos:', JSON.stringify(wpos));
+              return { ...wpos, success: true };
+            }
           }
+
+          // Calculate WPos from MPos - WCO
+          if (mposStr && wcoStr) {
+            const mpos = parsePositionString(mposStr);
+            const wco = parsePositionString(wcoStr);
+            if (mpos && wco) {
+              const wpos = {
+                x: mpos.x - wco.x,
+                y: mpos.y - wco.y,
+                z: mpos.z - wco.z
+              };
+              console.log('[3DMesh] Probe position (MPos-WCO):', JSON.stringify(wpos));
+              return { ...wpos, success: true };
+            }
+          }
+
+          // Fallback to MPos directly
+          if (mposStr) {
+            const mpos = parsePositionString(mposStr);
+            if (mpos) {
+              console.log('[3DMesh] Probe position from MPos:', JSON.stringify(mpos));
+              return { ...mpos, success: true };
+            }
+          }
+
+          console.log('[3DMesh] No position in state:', JSON.stringify(ms));
           return null;
         }
 
@@ -867,16 +976,16 @@ function showMainDialog(ctx, params) {
                 const probeCmd = 'G38.2 Z-' + maxPlunge.toFixed(3) + ' F' + feedRate.toFixed(0);
                 await sendCommand(probeCmd);
 
-                // Wait for PRB response
+                // Wait for probe to complete and query result
                 try {
-                  const prbResponse = await waitForResponse(/\\[PRB:/, 15000);
-                  const prb = parsePRB(prbResponse);
+                  const prb = await queryProbeResult();
 
                   if (prb && prb.success) {
                     mesh[r][c].z = prb.z;
                     completedPoints++;
+                    console.log('[3DMesh] Point (' + (r+1) + ',' + (c+1) + ') Z=' + prb.z.toFixed(3));
                   } else {
-                    throw new Error('Probe did not contact surface');
+                    throw new Error('Probe did not contact surface or failed to get result');
                   }
                 } catch (err) {
                   updateProgress('Error at point (' + (r+1) + ',' + (c+1) + '): ' + err.message);
@@ -973,20 +1082,57 @@ function showMainDialog(ctx, params) {
           }
 
           const referenceZ = convertToMetric(parseFloat(document.getElementById('referenceZ').value));
+          const applyBtn = document.getElementById('applyCompensationBtn');
+          applyBtn.disabled = true;
+          applyBtn.textContent = 'Applying...';
 
           try {
-            // Save referenceZ and trigger compensation
-            await fetch(API_BASE + '/api/plugins/com.ncsender.3dmesh/settings', {
+            console.log('[3DMesh] Applying compensation with referenceZ:', referenceZ);
+            console.log('[3DMesh] Mesh data:', JSON.stringify(meshData.gridParams));
+
+            // Save settings with applyCompensation flag and meshData
+            // This will trigger the server to apply compensation
+            const response = await fetch(API_BASE + '/api/plugins/com.ncsender.3dmesh/settings', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ referenceZ, applyCompensation: true, meshData })
+              body: JSON.stringify({
+                referenceZ: referenceZ,
+                meshData: meshData,
+                applyCompensation: true,
+                applyTimestamp: Date.now()
+              })
             });
 
-            // The server will apply compensation and reload the file
-            alert('Z compensation applied! Check the loaded G-code.');
-            window.postMessage({ type: 'close-plugin-dialog' }, '*');
+            if (!response.ok) {
+              throw new Error('Failed to save settings');
+            }
+
+            // Wait a bit for server to process
+            await new Promise(r => setTimeout(r, 500));
+
+            // Check the result by fetching settings
+            const checkResponse = await fetch(API_BASE + '/api/plugins/com.ncsender.3dmesh/settings');
+            const settings = await checkResponse.json();
+
+            console.log('[3DMesh] Settings after apply:', JSON.stringify(settings));
+
+            if (settings.lastApplyResult?.success) {
+              alert('Z compensation applied! File: ' + settings.lastApplyResult.filename);
+              window.postMessage({ type: 'close-plugin-dialog' }, '*');
+            } else if (settings.lastApplyResult?.error) {
+              alert('Failed to apply compensation: ' + settings.lastApplyResult.error);
+              applyBtn.disabled = false;
+              applyBtn.textContent = 'Apply Z Compensation';
+            } else {
+              // Assume success if no explicit result
+              alert('Z compensation applied! Check the loaded G-code.');
+              window.postMessage({ type: 'close-plugin-dialog' }, '*');
+            }
           } catch (error) {
+            console.error('[3DMesh] Apply error:', error);
             alert('Failed to apply compensation: ' + error.message);
+            applyBtn.disabled = false;
+            applyBtn.textContent = 'Apply Z Compensation';
           }
         });
 
@@ -1000,5 +1146,13 @@ function showMainDialog(ctx, params) {
 }
 
 export async function onUnload(ctx) {
+  ctx.log('3DMesh plugin unloading');
+
+  // Clear the check interval
+  if (checkIntervalId) {
+    clearInterval(checkIntervalId);
+    checkIntervalId = null;
+  }
+
   ctx.log('3DMesh plugin unloaded');
 }
