@@ -869,6 +869,20 @@ function showMainDialog(ctx, params) {
           return null;
         }
 
+        // Check if probe pin is currently triggered
+        async function isProbeTriggered() {
+          try {
+            const response = await fetch(API_BASE + '/api/server-state');
+            const state = await response.json();
+            const ms = state?.machineState;
+            const pn = ms?.Pn || '';
+            return pn.includes('P');
+          } catch (err) {
+            console.log('[3DMesh] Error checking probe state:', err.message);
+            return false;
+          }
+        }
+
         // Wait for machine to be idle (motion complete)
         async function waitForIdle(maxWaitMs = 10000) {
           const startTime = Date.now();
@@ -1084,13 +1098,9 @@ function showMainDialog(ctx, params) {
                   // - After probe, retract 1mm (just clear trigger)
                   // - Lateral G38.3 move
                   // - If probe triggers (didn't reach target): bounce 5mm, retry
-                  // - If probe didn't trigger (reached target): we're clear, no pre-plunge needed
-                  // This is efficient on down slopes (no unnecessary bouncing)
+                  // - Check actual probe pin state before plunge
 
-                  const INITIAL_RETRACT = 1;  // Just enough to clear probe trigger
                   const BOUNCE_HEIGHT = 5;    // Full bounce when we hit surface
-
-                  let probeHitDuringLateral = false;
 
                   // New row? Need to retract to highest Z from previous row for safe transition
                   if (c === 0 && r > 0) {
@@ -1106,15 +1116,10 @@ function showMainDialog(ctx, params) {
                     let pos = await queryProbeResult();
 
                     while (pos && Math.abs(pos.x - actualStartX) > 0.1 && !stopProbing) {
-                      probeHitDuringLateral = true;
                       console.log('[3DMesh] Lateral X hit at X=' + pos.x.toFixed(3) + ' Z=' + pos.z.toFixed(3) + ' - bouncing 5mm');
                       await safeRetract(pos.z + BOUNCE_HEIGHT, travelFeedRate);
                       await safeMove('X', actualStartX, travelFeedRate);
                       pos = await queryProbeResult();
-                    }
-                    // If we reached target, last lateral was clean - probe is clear
-                    if (pos && Math.abs(pos.x - actualStartX) <= 0.1) {
-                      probeHitDuringLateral = false;
                     }
 
                     // Then move Y to next row
@@ -1122,15 +1127,10 @@ function showMainDialog(ctx, params) {
                     pos = await queryProbeResult();
 
                     while (pos && Math.abs(pos.y - y) > 0.1 && !stopProbing) {
-                      probeHitDuringLateral = true;
                       console.log('[3DMesh] Lateral Y hit at Y=' + pos.y.toFixed(3) + ' Z=' + pos.z.toFixed(3) + ' - bouncing 5mm');
                       await safeRetract(pos.z + BOUNCE_HEIGHT, travelFeedRate);
                       await safeMove('Y', y, travelFeedRate);
                       pos = await queryProbeResult();
-                    }
-                    // If we reached target, last lateral was clean - probe is clear
-                    if (pos && Math.abs(pos.y - y) <= 0.1) {
-                      probeHitDuringLateral = false;
                     }
                   } else if (c > 0) {
                     // Within same row: just move X
@@ -1140,25 +1140,20 @@ function showMainDialog(ctx, params) {
                     let pos = await queryProbeResult();
 
                     while (pos && Math.abs(pos.x - x) > 0.1 && !stopProbing) {
-                      probeHitDuringLateral = true;
                       console.log('[3DMesh] Lateral hit at X=' + pos.x.toFixed(3) + ' Z=' + pos.z.toFixed(3) + ' - bouncing 5mm');
                       await safeRetract(pos.z + BOUNCE_HEIGHT, travelFeedRate);
                       await safeMove('X', x, travelFeedRate);
                       pos = await queryProbeResult();
                     }
-                    // If we reached target, last lateral was clean - probe is clear
-                    if (pos && Math.abs(pos.x - x) <= 0.1) {
-                      probeHitDuringLateral = false;
-                    }
                   }
 
-                  // Pre-plunge retract ONLY if last lateral move triggered (probe still in contact)
-                  // If no hit, we're above the surface and can probe directly (efficient on down slopes)
-                  if (probeHitDuringLateral) {
+                  // Check actual probe pin state - if triggered, must retract before plunge
+                  const probeIsTriggered = await isProbeTriggered();
+                  if (probeIsTriggered) {
                     const preProbePos = await queryProbeResult();
                     if (preProbePos && preProbePos.z !== null) {
                       const safeZ = preProbePos.z + clearanceHeight;
-                      console.log('[3DMesh] Pre-plunge retract (probe hit during lateral) to Z=' + safeZ.toFixed(3));
+                      console.log('[3DMesh] Pre-plunge retract (probe pin triggered) to Z=' + safeZ.toFixed(3));
                       await safeRetract(safeZ, travelFeedRate);
                     }
                   }
