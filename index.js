@@ -1201,10 +1201,11 @@ function showMainDialog(ctx, params) {
                 console.log('[3DMesh] Final retract to highest Z=' + meshHighestZ.toFixed(3) + ' + clearance = ' + finalRetractZ.toFixed(3));
                 await safeRetract(finalRetractZ, travelFeedRate);
 
-                // Return to starting position using G38.3 for safe movement
+                // Return to starting position using G1 (not G38.3) since we're at safe height
+                // G38.3 can fail with Error 33 if target is at/beyond soft limits
                 console.log('[3DMesh] Returning to start position X=' + actualStartX.toFixed(3) + ' Y=' + actualStartY.toFixed(3));
-                await safeMove('X', actualStartX, travelFeedRate);
-                await safeMove('Y', actualStartY, travelFeedRate);
+                await sendCommand('G1 X' + actualStartX.toFixed(3) + ' Y' + actualStartY.toFixed(3) + ' F' + travelFeedRate.toFixed(0));
+                await waitForIdle();
               }
               // Use actual start positions for gridParams so Z compensation works correctly
               const actualEndX = actualStartX + (cols - 1) * spacingX;
