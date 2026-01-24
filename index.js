@@ -1080,26 +1080,18 @@ function showMainDialog(ctx, params) {
                   console.log('[3DMesh] First point - probing at current position');
 
                 } else {
-                  // Subsequent points: use smart lateral probing for safe navigation
-                  // We're already at clearance height (retracted after previous probe)
+                  // Subsequent points: lateral probing with 1mm bounce
+                  // Pre-plunge retract ensures we're clear before probing
 
-                  let currentClearanceZ = (lastProbedZ || 0) + clearanceHeight;
+                  const BOUNCE_HEIGHT = 1; // Minimal bounce, pre-plunge retract is the safety net
 
                   // New row? Need to retract to highest Z from previous row for safe transition
                   if (c === 0 && r > 0) {
-                    currentClearanceZ = (rowHighestZ || lastProbedZ || 0) + clearanceHeight;
+                    const rowClearanceZ = (rowHighestZ || lastProbedZ || 0) + clearanceHeight;
                     console.log('[3DMesh] New row - retracting to highest Z=' + (rowHighestZ || 0).toFixed(3) + ' + clearance');
-                    await safeRetract(currentClearanceZ, travelFeedRate);
+                    await safeRetract(rowClearanceZ, travelFeedRate);
                     rowHighestZ = null; // Reset for new row
-                  }
-                  // Within same row: already at clearance from previous probe retract, no need to retract again
 
-                  // Lateral probe moves with bounce-on-hit strategy
-                  // This safely navigates over curved surfaces without crashing
-                  // G38.3 stops if probe triggers, then we bounce up and continue
-
-                  // New row: need to move both X (back to start) and Y (to next row)
-                  if (c === 0 && r > 0) {
                     updateProgress('Moving to row ' + (r+1) + '...');
 
                     // First move X back to actual start position
@@ -1107,9 +1099,8 @@ function showMainDialog(ctx, params) {
                     let pos = await queryProbeResult();
 
                     while (pos && Math.abs(pos.x - actualStartX) > 0.1 && !stopProbing) {
-                      console.log('[3DMesh] Lateral X hit at X=' + pos.x.toFixed(3) + ' Z=' + pos.z.toFixed(3) + ' - bouncing');
-                      currentClearanceZ = pos.z + clearanceHeight;
-                      await safeRetract(currentClearanceZ, travelFeedRate);
+                      console.log('[3DMesh] Lateral X hit at X=' + pos.x.toFixed(3) + ' Z=' + pos.z.toFixed(3) + ' - bouncing 1mm');
+                      await safeRetract(pos.z + BOUNCE_HEIGHT, travelFeedRate);
                       await safeMove('X', actualStartX, travelFeedRate);
                       pos = await queryProbeResult();
                     }
@@ -1119,9 +1110,8 @@ function showMainDialog(ctx, params) {
                     pos = await queryProbeResult();
 
                     while (pos && Math.abs(pos.y - y) > 0.1 && !stopProbing) {
-                      console.log('[3DMesh] Lateral Y hit at Y=' + pos.y.toFixed(3) + ' Z=' + pos.z.toFixed(3) + ' - bouncing');
-                      currentClearanceZ = pos.z + clearanceHeight;
-                      await safeRetract(currentClearanceZ, travelFeedRate);
+                      console.log('[3DMesh] Lateral Y hit at Y=' + pos.y.toFixed(3) + ' Z=' + pos.z.toFixed(3) + ' - bouncing 1mm');
+                      await safeRetract(pos.z + BOUNCE_HEIGHT, travelFeedRate);
                       await safeMove('Y', y, travelFeedRate);
                       pos = await queryProbeResult();
                     }
@@ -1133,9 +1123,8 @@ function showMainDialog(ctx, params) {
                     let pos = await queryProbeResult();
 
                     while (pos && Math.abs(pos.x - x) > 0.1 && !stopProbing) {
-                      console.log('[3DMesh] Lateral hit at X=' + pos.x.toFixed(3) + ' Z=' + pos.z.toFixed(3) + ' - bouncing');
-                      currentClearanceZ = pos.z + clearanceHeight;
-                      await safeRetract(currentClearanceZ, travelFeedRate);
+                      console.log('[3DMesh] Lateral hit at X=' + pos.x.toFixed(3) + ' Z=' + pos.z.toFixed(3) + ' - bouncing 1mm');
+                      await safeRetract(pos.z + BOUNCE_HEIGHT, travelFeedRate);
                       await safeMove('X', x, travelFeedRate);
                       pos = await queryProbeResult();
                     }
@@ -1164,17 +1153,10 @@ function showMainDialog(ctx, params) {
                   const prb = await queryProbeResult();
 
                   if (prb && prb.success) {
-                    // Store actual probed position (x, y calculated from actual start)
+                    // Store actual probed position
                     mesh[r][c].x = x;
                     mesh[r][c].y = y;
                     mesh[r][c].z = prb.z;
-
-                    // Smart clearance: if surface is descending, use minimal clearance (1mm)
-                    // If surface is ascending or first point, use full clearance
-                    const isDescending = lastProbedZ !== null && prb.z < lastProbedZ;
-                    const smartClearance = isDescending ? 1 : clearanceHeight;
-
-                    // Now update lastProbedZ after the comparison
                     lastProbedZ = prb.z;
 
                     // Track highest Z in this row for safe row transitions
@@ -1186,11 +1168,11 @@ function showMainDialog(ctx, params) {
                       meshHighestZ = prb.z;
                     }
                     completedPoints++;
-                    console.log('[3DMesh] Point (' + (r+1) + ',' + (c+1) + ') Z=' + prb.z.toFixed(3) + (isDescending ? ' (descending)' : ' (ascending)'));
+                    console.log('[3DMesh] Point (' + (r+1) + ',' + (c+1) + ') Z=' + prb.z.toFixed(3));
 
-                    const postProbeClearance = prb.z + smartClearance;
+                    // Minimal 1mm retract after probe - pre-plunge retract handles safety
+                    const postProbeClearance = prb.z + 1;
                     await safeRetract(postProbeClearance, travelFeedRate);
-                    console.log('[3DMesh] Retracted to Z=' + postProbeClearance.toFixed(3) + ' (clearance: ' + smartClearance + 'mm)');
                   } else {
                     throw new Error('Probe did not contact surface');
                   }
