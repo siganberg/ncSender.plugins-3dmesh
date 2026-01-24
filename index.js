@@ -215,19 +215,20 @@ function applyZCompensation(gcodeContent, mesh, gridParams, referenceZ) {
     if (zMatch) targetZ = isAbsolute ? parseFloat(zMatch[1]) : currentZ + parseFloat(zMatch[1]);
 
     // For arc moves (G2/G3) or rapid moves (G0), don't subdivide - just compensate endpoint
-    // For linear moves with Z (G1), subdivide for smooth surface following
+    // For linear moves (G1), subdivide for smooth surface following
     const isLinearMove = currentGMode === 'G1';
+    const isRapidMove = currentGMode === 'G0';
     const hasXY = xMatch || yMatch;
     const hasZ = zMatch !== null;
 
-    if (isLinearMove && hasXY && hasZ && isAbsolute) {
+    if (isLinearMove && hasXY && isAbsolute) {
       // Calculate move distance in XY plane
       const dx = targetX - currentX;
       const dy = targetY - currentY;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
       if (distance > segmentLength) {
-        // Subdivide the move
+        // Subdivide the move - applies to XY-only moves too!
         const segments = Math.ceil(distance / segmentLength);
         const dz = targetZ - currentZ;
 
@@ -242,7 +243,7 @@ function applyZCompensation(gcodeContent, mesh, gridParams, referenceZ) {
           const zOffset = meshZ - referenceZ;
           const compensatedZ = segZ + zOffset;
 
-          // Build segment command
+          // Build segment command with compensated Z
           let segCmd = 'G1';
           segCmd += ` X${segX.toFixed(3)}`;
           segCmd += ` Y${segY.toFixed(3)}`;
@@ -252,22 +253,54 @@ function applyZCompensation(gcodeContent, mesh, gridParams, referenceZ) {
           output.push(segCmd);
         }
       } else {
-        // Short move - just compensate endpoint
+        // Short move - compensate endpoint, always add Z for surface following
         const meshZ = interpolateZ(targetX, targetY, mesh, gridParams);
         const zOffset = meshZ - referenceZ;
         const compensatedZ = targetZ + zOffset;
+
+        if (hasZ) {
+          const newLine = line.replace(/Z([+-]?\d*\.?\d+)/i, `Z${compensatedZ.toFixed(3)}`);
+          output.push(newLine);
+        } else {
+          // XY-only move - add compensated Z
+          let newLine = line.trim();
+          // Insert Z before F if present, otherwise at end
+          if (currentFeedRate && newLine.match(/F[\d.]+/i)) {
+            newLine = newLine.replace(/(F[\d.]+)/i, `Z${compensatedZ.toFixed(3)} $1`);
+          } else {
+            newLine += ` Z${compensatedZ.toFixed(3)}`;
+          }
+          output.push(newLine);
+        }
+      }
+    } else if (isRapidMove && hasXY && isAbsolute) {
+      // Rapid move with XY - compensate Z at endpoint
+      const meshZ = interpolateZ(targetX, targetY, mesh, gridParams);
+      const zOffset = meshZ - referenceZ;
+      const compensatedZ = targetZ + zOffset;
+
+      if (hasZ) {
         const newLine = line.replace(/Z([+-]?\d*\.?\d+)/i, `Z${compensatedZ.toFixed(3)}`);
         output.push(newLine);
+      } else {
+        // Add Z to rapid if moving at a working height (not fully retracted)
+        // Only add Z if current Z is below safe height (e.g., < 10mm)
+        if (currentZ < 10) {
+          let newLine = line.trim() + ` Z${compensatedZ.toFixed(3)}`;
+          output.push(newLine);
+        } else {
+          output.push(line);
+        }
       }
     } else if (hasZ && isAbsolute) {
-      // Z move without XY subdivision - just compensate at current position
+      // Z-only move - compensate at current XY position
       const meshZ = interpolateZ(targetX, targetY, mesh, gridParams);
       const zOffset = meshZ - referenceZ;
       const compensatedZ = targetZ + zOffset;
       const newLine = line.replace(/Z([+-]?\d*\.?\d+)/i, `Z${compensatedZ.toFixed(3)}`);
       output.push(newLine);
     } else {
-      // No Z or not absolute - pass through
+      // No coordinates or not absolute - pass through
       output.push(line);
     }
 
