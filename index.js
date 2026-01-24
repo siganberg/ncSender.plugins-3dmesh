@@ -1112,6 +1112,10 @@ function showMainDialog(ctx, params) {
                       await safeMove('X', actualStartX, travelFeedRate);
                       pos = await queryProbeResult();
                     }
+                    // If we reached target, last lateral was clean - probe is clear
+                    if (pos && Math.abs(pos.x - actualStartX) <= 0.1) {
+                      probeHitDuringLateral = false;
+                    }
 
                     // Then move Y to next row
                     await safeMove('Y', y, travelFeedRate);
@@ -1123,6 +1127,10 @@ function showMainDialog(ctx, params) {
                       await safeRetract(pos.z + BOUNCE_HEIGHT, travelFeedRate);
                       await safeMove('Y', y, travelFeedRate);
                       pos = await queryProbeResult();
+                    }
+                    // If we reached target, last lateral was clean - probe is clear
+                    if (pos && Math.abs(pos.y - y) <= 0.1) {
+                      probeHitDuringLateral = false;
                     }
                   } else if (c > 0) {
                     // Within same row: just move X
@@ -1138,9 +1146,13 @@ function showMainDialog(ctx, params) {
                       await safeMove('X', x, travelFeedRate);
                       pos = await queryProbeResult();
                     }
+                    // If we reached target, last lateral was clean - probe is clear
+                    if (pos && Math.abs(pos.x - x) <= 0.1) {
+                      probeHitDuringLateral = false;
+                    }
                   }
 
-                  // Pre-plunge retract ONLY if probe hit during lateral move
+                  // Pre-plunge retract ONLY if last lateral move triggered (probe still in contact)
                   // If no hit, we're above the surface and can probe directly (efficient on down slopes)
                   if (probeHitDuringLateral) {
                     const preProbePos = await queryProbeResult();
