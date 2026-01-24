@@ -586,7 +586,19 @@ function showMainDialog(ctx, params) {
       .mesh-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
       .mesh-table th, .mesh-table td { padding: 4px 8px; border: 1px solid var(--color-border); text-align: center; }
       .mesh-table th { background: var(--color-surface-muted); }
+
+      /* Toast notifications */
+      .toast-container { position: fixed; top: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; }
+      .toast { padding: 12px 20px; border-radius: 6px; font-size: 0.9rem; font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: slideIn 0.3s ease; max-width: 300px; }
+      .toast.success { background: #4caf50; color: white; }
+      .toast.error { background: #f44336; color: white; }
+      .toast.info { background: var(--color-accent); color: white; }
+      .toast.fadeOut { animation: fadeOut 0.3s ease forwards; }
+      @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+      @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
     </style>
+
+    <div class="toast-container" id="toastContainer"></div>
 
     <div class="mesh-dialog">
       <div class="mesh-tabs">
@@ -765,6 +777,19 @@ function showMainDialog(ctx, params) {
         const convertToMetric = (value) => isImperial ? value * INCH_TO_MM : value;
         const convertToDisplay = (value) => isImperial ? value * MM_TO_INCH : value;
 
+        // Toast notification helper
+        function showToast(message, type = 'info', duration = 3000) {
+          const container = document.getElementById('toastContainer');
+          const toast = document.createElement('div');
+          toast.className = 'toast ' + type;
+          toast.textContent = message;
+          container.appendChild(toast);
+          setTimeout(() => {
+            toast.classList.add('fadeOut');
+            setTimeout(() => toast.remove(), 300);
+          }, duration);
+        }
+
         // Calculate API base URL
         // When on Vite dev server (5174), API is on port 8090
         // When in production, use relative URLs
@@ -936,9 +961,9 @@ function showMainDialog(ctx, params) {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(settings)
             });
-            alert('Settings saved!');
+            showToast('Settings saved!', 'success');
           } catch (error) {
-            alert('Failed to save settings');
+            showToast('Failed to save settings', 'error');
           }
         });
 
@@ -1090,17 +1115,17 @@ function showMainDialog(ctx, params) {
           const params = { rows, cols, sizeX, sizeY, spacingX, spacingY, probeFeedRate, travelFeedRate, clearanceHeight, maxPlunge };
           const invalidParams = Object.entries(params).filter(([k, v]) => isNaN(v) || v === null || v === undefined);
           if (invalidParams.length > 0) {
-            alert('Invalid parameters: ' + invalidParams.map(([k, v]) => k + '=' + v).join(', '));
+            showToast('Invalid parameters: ' + invalidParams.map(([k, v]) => k + '=' + v).join(', '), 'error');
             return;
           }
 
           if (cols < 1 || rows < 1) {
-            alert('Grid must have at least 1 point in each direction');
+            showToast('Grid must have at least 1 point in each direction', 'error');
             return;
           }
 
           if (cols === 1 && rows === 1) {
-            alert('Grid must have more than 1 point total');
+            showToast('Grid must have more than 1 point total', 'error');
             return;
           }
 
@@ -1362,9 +1387,9 @@ function showMainDialog(ctx, params) {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ meshData, saveMeshFile: true })
             });
-            alert('Mesh saved to file!');
+            showToast('Mesh saved to file!', 'success');
           } catch (error) {
-            alert('Failed to save mesh: ' + error.message);
+            showToast('Failed to save mesh: ' + error.message, 'error');
           }
         });
 
@@ -1376,12 +1401,12 @@ function showMainDialog(ctx, params) {
             if (settings.meshData) {
               meshData = settings.meshData;
               updateMeshStatus();
-              alert('Mesh loaded!');
+              showToast('Mesh loaded!', 'success');
             } else {
-              alert('No saved mesh found.');
+              showToast('No saved mesh found', 'info');
             }
           } catch (error) {
-            alert('Failed to load mesh: ' + error.message);
+            showToast('Failed to load mesh: ' + error.message, 'error');
           }
         });
 
@@ -1396,7 +1421,7 @@ function showMainDialog(ctx, params) {
         // Apply compensation
         document.getElementById('applyCompensationBtn').addEventListener('click', async () => {
           if (!meshData) {
-            alert('No mesh data available');
+            showToast('No mesh data available', 'error');
             return;
           }
 
@@ -1436,20 +1461,20 @@ function showMainDialog(ctx, params) {
             console.log('[3DMesh] Settings after apply:', JSON.stringify(settings));
 
             if (settings.lastApplyResult?.success) {
-              alert('Z compensation applied! File: ' + settings.lastApplyResult.filename);
+              showToast('Z compensation applied! File: ' + settings.lastApplyResult.filename, 'success');
               window.postMessage({ type: 'close-plugin-dialog' }, '*');
             } else if (settings.lastApplyResult?.error) {
-              alert('Failed to apply compensation: ' + settings.lastApplyResult.error);
+              showToast('Failed: ' + settings.lastApplyResult.error, 'error');
               applyBtn.disabled = false;
               applyBtn.textContent = 'Apply Z Compensation';
             } else {
               // Assume success if no explicit result
-              alert('Z compensation applied! Check the loaded G-code.');
+              showToast('Z compensation applied!', 'success');
               window.postMessage({ type: 'close-plugin-dialog' }, '*');
             }
           } catch (error) {
             console.error('[3DMesh] Apply error:', error);
-            alert('Failed to apply compensation: ' + error.message);
+            showToast('Failed: ' + error.message, 'error');
             applyBtn.disabled = false;
             applyBtn.textContent = 'Apply Z Compensation';
           }
