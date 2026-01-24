@@ -1083,7 +1083,7 @@ function showMainDialog(ctx, params) {
                   // Subsequent points: lateral probing with 1mm bounce
                   // Pre-plunge retract ensures we're clear before probing
 
-                  const BOUNCE_HEIGHT = 1; // Minimal bounce, pre-plunge retract is the safety net
+                  const BOUNCE_HEIGHT = 5; // Must be enough to physically de-trigger probe
 
                   // New row? Need to retract to highest Z from previous row for safe transition
                   if (c === 0 && r > 0) {
@@ -1170,8 +1170,8 @@ function showMainDialog(ctx, params) {
                     completedPoints++;
                     console.log('[3DMesh] Point (' + (r+1) + ',' + (c+1) + ') Z=' + prb.z.toFixed(3));
 
-                    // Minimal 1mm retract after probe - pre-plunge retract handles safety
-                    const postProbeClearance = prb.z + 1;
+                    // Retract 5mm after probe to ensure probe is de-triggered
+                    const postProbeClearance = prb.z + 5;
                     await safeRetract(postProbeClearance, travelFeedRate);
                   } else {
                     throw new Error('Probe did not contact surface');
