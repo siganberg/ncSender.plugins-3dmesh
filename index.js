@@ -1145,6 +1145,18 @@ function showMainDialog(ctx, params) {
                 // Always do plunge probe at target X,Y to get accurate Z measurement
                 updateProgress('Probing (' + (r+1) + ',' + (c+1) + ')...');
 
+                // IMPORTANT: Ensure probe is not in contact before plunge
+                // If lateral G38.3 hit surface at target position, probe is still triggered
+                // Must retract first or G38.2 will ALARM:4
+                if (!isFirstPoint) {
+                  const preProbePos = await queryProbeResult();
+                  if (preProbePos && preProbePos.z !== null) {
+                    const safeZ = preProbePos.z + clearanceHeight;
+                    console.log('[3DMesh] Pre-plunge retract to Z=' + safeZ.toFixed(3));
+                    await safeRetract(safeZ, travelFeedRate);
+                  }
+                }
+
                 const probeCmd = 'G38.2 Z-' + maxPlunge.toFixed(3) + ' F' + probeFeedRate.toFixed(0);
                 await sendCommand(probeCmd);
 
