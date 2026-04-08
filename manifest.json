@@ -2,13 +2,20 @@
   "id": "com.ncsender.3dmesh",
   "name": "3DMesh",
   "version": "0.1.0",
-  "minAppVersion": "0.3.131",
+  "minAppVersion": "2.0.0",
   "author": "ncSender",
   "description": "Surface mesh probing with Z compensation for milling curved materials using flat programming.",
   "entry": "index.js",
+  "configUi": "config.html",
   "icon": "logo.png",
   "category": "gcode-generator",
   "repository": "https://github.com/siganberg/ncsender-plugin-3dmesh",
+  "platforms": {
+    "pro-v2": "2.0.0"
+  },
   "events": [],
-  "permissions": ["gcode.modify"]
+  "permissions": ["gcode.modify"],
+  "toolMenu": [
+    { "id": "3dmesh", "label": "3DMesh", "icon": "logo.png", "clientOnly": true }
+  ]
 }
