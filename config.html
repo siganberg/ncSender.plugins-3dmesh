@@ -403,13 +403,14 @@
             <option value="auto">Auto from G-code</option>
           </select>
         </div>
-        <div class="form-group" style="margin-bottom: 12px;">
-          <label>Grid Size</label>
-          <div class="grid-size-row">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Columns (X)</label>
             <input type="number" id="cols" value="5" min="1" max="50">
-            <span>x</span>
+          </div>
+          <div class="form-group">
+            <label>Rows (Y)</label>
             <input type="number" id="rows" value="5" min="1" max="50">
-            <span>points</span>
           </div>
         </div>
         <div id="manualGridSettings">
