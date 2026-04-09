@@ -31,11 +31,6 @@ jobs:
           echo "PLUGIN_VERSION=$PLUGIN_VERSION" >> $GITHUB_OUTPUT
           echo "TAG=$TAG" >> $GITHUB_OUTPUT
 
-          echo "Plugin ID: $PLUGIN_ID"
-          echo "Plugin Name: $PLUGIN_NAME"
-          echo "Plugin Version: $PLUGIN_VERSION"
-          echo "Tag: $TAG"
-
       - name: Create plugin package
         run: |
           mkdir -p dist
@@ -43,35 +38,34 @@ jobs:
           TAG="${{ steps.plugin_info.outputs.TAG }}"
           ZIP_NAME="${PLUGIN_ID}_${TAG}.zip"
 
-          # Create a temporary directory for the plugin
           mkdir -p "tmp/$PLUGIN_ID"
-
-          # Copy all files except .git, .github, .scripts, dist, and latest_release.md
           rsync -av --exclude='.git' --exclude='.github' --exclude='.scripts' --exclude='dist' --exclude='latest_release.md' --exclude='tmp' ./ "tmp/$PLUGIN_ID/"
 
-          # Create zip from the temporary directory
           cd tmp
           zip -r "../dist/$ZIP_NAME" "$PLUGIN_ID"
           cd ..
-
-          # Cleanup
           rm -rf tmp
 
           echo "Created package: dist/$ZIP_NAME"
           ls -lh dist/
 
-      - name: Get release notes from latest_release.md
+      - name: Get release notes from tag message
         id: release_notes
         run: |
-          if [ -f "latest_release.md" ]; then
-            cp latest_release.md release-notes.md
-            echo "Release notes content:"
-            cat release-notes.md
-            echo "---END RELEASE NOTES---"
-          else
-            echo "⚠️ latest_release.md not found, using default message"
-            echo "Release ${{ github.ref_name }}" > release-notes.md
+          TAG="${{ github.ref_name }}"
+          # Extract tag annotation message (release notes)
+          TAG_MESSAGE=$(git tag -l --format='%(contents)' "$TAG")
+          if [ -z "$TAG_MESSAGE" ] || [ "$TAG_MESSAGE" = "Release $TAG" ]; then
+            echo "No detailed release notes in tag, generating from commits..."
+            PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${TAG}$" | head -1)
+            if [ -n "$PREV_TAG" ]; then
+              TAG_MESSAGE=$(git log "$PREV_TAG..$TAG" --pretty=format:"- %s" | head -20)
+            else
+              TAG_MESSAGE="Initial release"
+            fi
           fi
+          echo "$TAG_MESSAGE" > release-notes.md
+          cat release-notes.md
 
       - name: Create Release
         env:
