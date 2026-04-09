@@ -385,7 +385,7 @@
 
 <div class="toast-container" id="toastContainer"></div>
 
-<div class="mesh-dialog">
+<div class="mesh-dialog" style="visibility: hidden; min-height: 200px;">
   <div class="mesh-tabs">
     <button class="mesh-tab active" data-tab="probe">Probe</button>
     <button class="mesh-tab" data-tab="mesh">Mesh Data</button>
@@ -474,11 +474,12 @@
 
   <!-- Mesh Data Tab -->
   <div class="mesh-panel" id="panel-mesh">
-    <div class="info-box">
+    <div class="info-box" style="position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between;">
       <div class="mesh-status">
         <span class="status-dot" id="meshStatusDot2"></span>
         <span id="meshStatusText2">Checking...</span>
       </div>
+      <button class="btn btn-success" id="applyCompensationBtn2" disabled style="padding: 6px 16px; border-radius: 4px; white-space: nowrap;">Apply</button>
     </div>
 
     <div class="mesh-visualizer-container" id="meshVizContainer">
@@ -503,7 +504,6 @@
       <div style="display: flex; gap: 8px; margin-top: 12px; align-items: center;">
         <input type="text" id="meshSaveName" placeholder="Mesh name (e.g. Guitar Body Top)" style="flex: 1; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 0.9rem; background: var(--color-surface); color: var(--color-text-primary);">
         <button class="btn btn-primary" id="saveMeshBtn" disabled style="white-space: nowrap; padding: 6px 16px; border-radius: 4px;">Rename</button>
-        <button class="btn btn-success" id="applyCompensationBtn" disabled style="white-space: nowrap; padding: 6px 16px; border-radius: 4px;">Apply</button>
       </div>
     </div>
 
@@ -1342,9 +1342,11 @@
 
   function updateApplyStatus() {
     var hasMesh = meshData && meshData.mesh && meshData.gridParams;
-    var applyBtn = document.getElementById('applyCompensationBtn');
-    if (applyBtn) {
-      applyBtn.disabled = !(hasGcode && hasMesh);
+    var enabled = hasGcode && hasMesh;
+    var btns = ['applyCompensationBtn', 'applyCompensationBtn2'];
+    for (var i = 0; i < btns.length; i++) {
+      var btn = document.getElementById(btns[i]);
+      if (btn) btn.disabled = !enabled;
     }
   }
 
@@ -1760,8 +1762,8 @@
           '<div class="saved-mesh-meta">' + grid + ' grid &bull; ' + date + '</div>' +
         '</div>' +
         '<div class="saved-mesh-actions">' +
-          '<button class="btn btn-primary" onclick="loadSavedMesh(' + i + ')">Load</button>' +
-          '<button onclick="deleteSavedMesh(' + i + ')" title="Delete" style="all: unset; display: inline-block; background: #f44336; color: white; border-radius: 8px; padding: 10px 16px; font-size: 0.9rem; font-weight: 500; cursor: pointer; text-align: center;">X</button>' +
+          '<button class="btn btn-primary" onclick="loadSavedMesh(' + i + ')" style="padding: 5px 14px; font-size: 0.85rem;">Load</button>' +
+          '<button onclick="deleteSavedMesh(' + i + ')" title="Delete" style="all: unset; display: inline-block; background: #f44336; color: white; border-radius: 8px; padding: 5px 12px; font-size: 0.85rem; font-weight: 500; cursor: pointer; text-align: center;">X</button>' +
         '</div>' +
       '</div>';
     }
@@ -1855,14 +1857,14 @@
 
   // --- Clear current mesh ---
   // --- Apply compensation (client-side) ---
-  document.getElementById('applyCompensationBtn').addEventListener('click', function() {
+  document.getElementById('applyCompensationBtn2').addEventListener('click', function() {
     if (!meshData) {
       showToast('No mesh data available', 'error');
       return;
     }
 
     var referenceZ = 0;
-    var applyBtn = document.getElementById('applyCompensationBtn');
+    var applyBtn = document.getElementById('applyCompensationBtn2');
     applyBtn.disabled = true;
     applyBtn.textContent = 'Applying...';
 
@@ -1896,6 +1898,27 @@
 
   // --- Initialization ---
   function initialize() {
+    // Check if a program is loaded — show message if not
+    var dialog = document.querySelector('.mesh-dialog');
+    getInitState().then(function(data) {
+      var state = data && data.serverState;
+      var jobLoaded = state && state.jobLoaded;
+      if (!jobLoaded || !jobLoaded.filename) {
+        dialog.innerHTML =
+          '<div style="padding: 20px 30px; text-align: center;">' +
+            '<div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.3;">&#128269;</div>' +
+            '<h3 style="color: var(--color-text-primary); margin-bottom: 12px;">No G-code Program Loaded</h3>' +
+            '<p style="color: var(--color-text-secondary); margin-bottom: 24px;">Please load a G-code program first before using 3DMesh surface probing.</p>' +
+            '<button class="btn btn-primary" onclick="window.postMessage({ type: \'close-plugin-dialog\' }, \'*\')">Close</button>' +
+          '</div>';
+        dialog.style.visibility = 'visible';
+        return;
+      }
+      dialog.style.visibility = 'visible';
+    }).catch(function() {
+      dialog.style.visibility = 'visible';
+    });
+
     // Load saved meshes list
     loadSavedMeshList();
 

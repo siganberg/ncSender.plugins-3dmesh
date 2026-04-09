@@ -37,11 +37,6 @@ export async function onLoad(ctx) {
 
   ctx.registerToolMenu('3DMesh', async () => {
     ctx.log('3DMesh tool opened');
-    const serverState = ctx.getServerState();
-    if (!serverState?.jobLoaded?.filename) {
-      ctx.showDialog('3DMesh', '<div style="padding: 30px; text-align: center; color: var(--color-text-secondary);"><h3 style="color: var(--color-text-primary); margin-bottom: 12px;">No G-code Program Loaded</h3><p>Please load a G-code program first before using 3DMesh.</p></div>', { size: 'small' });
-      return;
-    }
     showTool(ctx, '3DMesh', ctx.getSettings() || {}, ctx.getAppSettings() || {});
   }, { clientOnly: true, icon: 'logo.png' });
 }
