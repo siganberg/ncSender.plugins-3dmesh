@@ -1,165 +1,475 @@
 <style>
-  .mesh-dialog { padding: 20px 20px 10px 20px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--color-text-primary); width: 750px; }
-  .mesh-tabs { display: flex; gap: 2px; padding: 4px 16px 0 16px; background: var(--color-surface-muted); border: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
-  .mesh-tab { all: unset; padding: 10px 20px; cursor: pointer; background: transparent !important; border: none !important; border-radius: 4px 4px 0 0 !important; color: var(--color-text-secondary) !important; font-size: 0.95rem; font-weight: 500; position: relative; transition: all 0.2s ease; margin-top: 4px; box-sizing: border-box; }
-  .mesh-tab.active { background: var(--color-surface) !important; color: var(--color-text-primary) !important; box-shadow: 0 -2px 8px rgba(0,0,0,0.15); }
-  .mesh-tab.active::after { content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 2px; background: var(--color-accent); border-radius: 2px 2px 0 0; }
-  .mesh-tab:hover:not(.active) { background: var(--color-surface) !important; color: var(--color-text-primary) !important; transform: translateY(-1px); }
-  .mesh-panel { display: none; padding: 20px; border-left: 1px solid var(--color-border); border-right: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); min-height: 520px; max-height: 520px; overflow-y: auto; }
-  .mesh-panel.active { display: block; }
-  .form-section { background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-  .form-section-title { font-weight: 600; margin-bottom: 12px; color: var(--color-text-primary); }
-  .form-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 12px; }
+  .mesh-dialog {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--color-text-primary);
+    width: 800px;
+    box-sizing: border-box;
+  }
+  .mesh-tabs {
+    display: flex;
+    gap: 2px;
+    padding: 4px 16px 0 16px;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+  }
+  .mesh-tab {
+    all: unset;
+    padding: 10px 20px;
+    cursor: pointer;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 4px 4px 0 0 !important;
+    color: var(--color-text-secondary) !important;
+    font-size: 0.95rem;
+    font-weight: 500;
+    position: relative;
+    transition: all 0.2s ease;
+    margin-top: 4px;
+    box-sizing: border-box;
+  }
+  .mesh-tab.active {
+    background: var(--color-surface) !important;
+    color: var(--color-text-primary) !important;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.15);
+  }
+  .mesh-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--color-accent);
+    border-radius: 2px 2px 0 0;
+  }
+  .mesh-tab:hover:not(.active) {
+    background: var(--color-surface) !important;
+    color: var(--color-text-primary) !important;
+    transform: translateY(-1px);
+  }
+  .saved-mesh-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    margin-bottom: 6px;
+    background: var(--color-surface);
+  }
+  .saved-mesh-item:hover { background: var(--color-surface-muted); }
+  .saved-mesh-item.active { border-color: var(--color-accent); }
+  .form-cards-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 12px;
+  }
+  .form-cards-row .form-card { margin-bottom: 0; }
+  .saved-mesh-info { flex: 1; }
+  .saved-mesh-name { font-weight: 600; font-size: 0.9rem; color: var(--color-text-primary); }
+  .saved-mesh-meta { font-size: 0.8rem; color: var(--color-text-secondary); margin-top: 2px; }
+  .saved-mesh-actions { display: flex; gap: 6px; }
+  .saved-mesh-actions .btn { padding: 5px 12px; font-size: 0.8rem; }
+  .mesh-panel {
+    display: none;
+    padding: 20px;
+    border-left: 1px solid var(--color-border);
+    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+    height: 620px;
+    overflow-y: auto;
+    box-sizing: border-box;
+  }
+  .mesh-panel.active {
+    display: flex;
+    flex-direction: column;
+  }
+  .mesh-panel .form-card:last-of-type {
+    flex: 1;
+  }
+
+  /* Form cards matching toolbench */
+  .form-card {
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-medium);
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), 0 2px 4px rgba(0, 0, 0, 0.15);
+    box-sizing: border-box;
+    min-width: 0;
+  }
+  .form-card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--color-border);
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .unit-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--color-accent, #7c5cbf);
+    color: #fff;
+    letter-spacing: 0.5px;
+  }
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
   .form-row.three-col { grid-template-columns: repeat(3, 1fr); }
-  .form-group { display: flex; flex-direction: column; }
-  .form-group label { font-size: 0.85rem; font-weight: 500; margin-bottom: 4px; color: var(--color-text-primary); }
-  .form-group input, .form-group select { padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 0.9rem; background: var(--color-surface); color: var(--color-text-primary); }
-  .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--color-accent); }
-  .info-box { background: var(--color-surface-muted); border: 1px solid var(--color-border); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 0.9rem; }
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+  .form-group label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin-bottom: 4px;
+    color: var(--color-text-primary);
+  }
+  .form-group input, .form-group select {
+    padding: 8px 10px !important;
+    margin: 0 !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 4px !important;
+    font-size: 0.9rem;
+    background: var(--color-surface);
+    color: var(--color-text-primary);
+    box-sizing: border-box;
+    width: 100%;
+  }
+  .form-group input:focus, .form-group select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+  }
+  .info-box {
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-medium);
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+  }
   .info-box.success { border-color: #4caf50; background: rgba(76, 175, 80, 0.1); }
   .info-box.warning { border-color: #ff9800; background: rgba(255, 152, 0, 0.1); }
   .mesh-status { display: flex; align-items: center; gap: 8px; }
-  .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #666; }
+  .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #666; flex-shrink: 0; }
   .status-dot.active { background: #4caf50; }
-  .button-row { display: flex; justify-content: center; gap: 10px; margin-top: 16px; padding: 16px 20px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 8px; }
-  .button-row.inline { background: transparent; border: none; padding: 0; margin-top: 16px; }
-  .btn { padding: 10px 24px; border-radius: 4px; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: background-color 0.2s; border: none; }
-  .btn-secondary { background: var(--color-surface); border: 1px solid var(--color-border); color: var(--color-text-primary); }
+
+  /* Buttons */
+  .btn {
+    padding: 10px 24px;
+    border-radius: var(--radius-small);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    border: none;
+  }
+  .btn-secondary {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-primary);
+  }
   .btn-secondary:hover { background: var(--color-surface-muted); }
   .btn-primary { background: var(--color-accent); color: white; }
   .btn-primary:hover { opacity: 0.9; }
   .btn-primary:disabled, .btn-success:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-success { background: #4caf50; color: white; }
   .btn-danger { background: #f44336; color: white; }
-  .probe-progress { border: 1px solid var(--color-border); border-radius: 4px; padding: 16px; background: var(--color-surface); min-height: 120px; }
-  .progress-bar { height: 8px; background: var(--color-surface-muted); border-radius: 4px; overflow: hidden; margin: 10px 0; }
-  .progress-fill { height: 100%; background: var(--color-accent); transition: width 0.3s; }
-  .mesh-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-  .mesh-table th, .mesh-table td { padding: 4px 8px; border: 1px solid var(--color-border); text-align: center; }
-  .mesh-table th { background: var(--color-surface-muted); }
+
+  /* Footer */
+  .plugin-dialog-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-surface);
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  /* Button row inline */
+  .button-row-inline {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  /* Probe progress */
+  .probe-progress {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-small);
+    padding: 16px;
+    background: var(--color-surface);
+    min-height: 120px;
+  }
+  .progress-bar {
+    height: 8px;
+    background: var(--color-surface-muted);
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 10px 0;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--color-accent);
+    transition: width 0.3s;
+  }
+
+  /* Mesh table */
+  .mesh-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  .mesh-table th, .mesh-table td {
+    padding: 6px 8px;
+    border: 1px solid var(--color-border);
+    text-align: center;
+  }
+  .mesh-table th { background: var(--color-surface-muted); font-weight: 600; }
+
+  /* Grid size inputs */
+  .grid-size-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .grid-size-row input {
+    width: 70px;
+    text-align: center;
+  }
+  .grid-size-row span {
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    font-weight: 500;
+  }
+
+  /* Info text */
+  .info-text {
+    margin: 8px 0;
+    font-size: 0.85rem;
+    color: var(--color-text-secondary);
+    line-height: 1.4;
+  }
+
+  /* Warning list */
+  .warning-list {
+    margin: 8px 0 0 20px;
+    padding: 0;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+
+  /* 3D Visualizer */
+  .mesh-visualizer-container {
+    position: relative;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-small);
+    overflow: hidden;
+    margin-bottom: 16px;
+    min-height: 300px;
+    flex-shrink: 0;
+  }
+  .mesh-canvas {
+    display: block;
+    width: 100%;
+    cursor: grab;
+  }
+  .mesh-canvas:active { cursor: grabbing; }
+  .mesh-canvas-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 300px;
+    color: var(--color-text-secondary);
+    font-size: 0.9rem;
+  }
+  .mesh-legend {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    background: rgba(0,0,0,0.6);
+    border-radius: var(--radius-small);
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .mesh-legend-bar {
+    width: 120px;
+    height: 10px;
+    border-radius: 3px;
+    background: linear-gradient(to right, #2196F3, #4CAF50, #FF9800, #f44336);
+  }
+  .mesh-legend-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+  }
+  .mesh-viz-hint {
+    position: absolute;
+    top: 8px;
+    left: 12px;
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+    opacity: 0.7;
+  }
 
   /* Toast notifications */
-  .toast-container { position: fixed; top: 20px; right: 20px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; }
-  .toast { padding: 12px 20px; border-radius: 6px; font-size: 0.9rem; font-weight: 500; box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: slideIn 0.3s ease; max-width: 300px; }
+  .toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .toast {
+    padding: 12px 20px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    animation: slideIn 0.3s ease;
+    max-width: 300px;
+  }
   .toast.success { background: #4caf50; color: white; }
   .toast.error { background: #f44336; color: white; }
   .toast.info { background: var(--color-accent); color: white; }
   .toast.fadeOut { animation: fadeOut 0.3s ease forwards; }
   @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
   @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+
+  /* Confirm dialog */
+  .confirm-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5); z-index: 10001;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .confirm-box {
+    background: var(--color-surface); border: 1px solid var(--color-border);
+    border-radius: 8px; padding: 24px; max-width: 400px; width: 90%;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .confirm-box .confirm-title {
+    font-size: 1rem; font-weight: 600; margin-bottom: 12px;
+    color: var(--color-text-primary);
+  }
+  .confirm-box .confirm-message {
+    font-size: 0.9rem; color: var(--color-text-secondary);
+    margin-bottom: 20px; line-height: 1.5;
+  }
+  .confirm-box .confirm-actions {
+    display: flex; justify-content: flex-end; gap: 10px;
+  }
 </style>
 
 <div class="toast-container" id="toastContainer"></div>
 
 <div class="mesh-dialog">
   <div class="mesh-tabs">
-    <button class="mesh-tab active" data-tab="setup">Setup</button>
-    <button class="mesh-tab" data-tab="probe">Probe</button>
+    <button class="mesh-tab active" data-tab="probe">Probe</button>
     <button class="mesh-tab" data-tab="mesh">Mesh Data</button>
-    <button class="mesh-tab" data-tab="apply">Apply</button>
   </div>
 
-  <!-- Setup Tab -->
-  <div class="mesh-panel active" id="panel-setup">
-    <div class="form-section">
-      <div class="form-section-title">Grid Configuration</div>
-      <div class="form-row">
-        <div class="form-group">
+  <!-- Probe Tab (merged Setup + Probe) -->
+  <div class="mesh-panel active" id="panel-probe">
+    <div class="form-cards-row">
+      <div class="form-card">
+        <div class="form-card-title">Grid Configuration <span class="unit-badge" id="unitBadgeGrid">mm</span></div>
+        <div class="form-group" style="margin-bottom: 12px;">
           <label>Grid Mode</label>
           <select id="gridMode">
             <option value="manual">Manual</option>
             <option value="auto">Auto from G-code</option>
           </select>
         </div>
-        <div class="form-group">
+        <div class="form-group" style="margin-bottom: 12px;">
           <label>Grid Size</label>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <input type="number" id="cols" value="5" min="1" max="50" style="width: 60px;">
+          <div class="grid-size-row">
+            <input type="number" id="cols" value="5" min="1" max="50">
             <span>x</span>
-            <input type="number" id="rows" value="5" min="1" max="50" style="width: 60px;">
+            <input type="number" id="rows" value="5" min="1" max="50">
             <span>points</span>
           </div>
         </div>
+        <div id="manualGridSettings">
+          <div class="form-row">
+            <div class="form-group">
+              <label id="labelSizeX">Size X</label>
+              <input type="number" id="sizeX" value="100" step="0.1" min="0">
+            </div>
+            <div class="form-group">
+              <label id="labelSizeY">Size Y</label>
+              <input type="number" id="sizeY" value="100" step="0.1" min="0">
+            </div>
+          </div>
+        </div>
+        <div id="autoGridInfo" style="display: none;">
+          <div class="info-box" id="boundsInfoBox"><strong>Bounds:</strong> <span id="boundsInfoText">No G-code loaded</span></div>
+        </div>
       </div>
-      <div id="manualGridSettings">
+
+      <div class="form-card">
+        <div class="form-card-title">Probe Settings <span class="unit-badge" id="unitBadge">mm</span></div>
         <div class="form-row">
           <div class="form-group">
-            <label id="labelSizeX">Size X (mm)</label>
-            <input type="number" id="sizeX" value="100" step="0.1" min="0">
+            <label id="labelProbeFeed">Probe Feed Rate</label>
+            <input type="number" id="probeFeedRate" value="100" min="1" max="1000">
           </div>
           <div class="form-group">
-            <label id="labelSizeY">Size Y (mm)</label>
-            <input type="number" id="sizeY" value="100" step="0.1" min="0">
+            <label id="labelTravelFeed">Travel Feed Rate</label>
+            <input type="number" id="travelFeedRate" value="2000" min="100" max="5000">
           </div>
         </div>
-        <p class="info-text" style="margin: 8px 0; font-size: 12px; color: var(--color-text-secondary);">
-          Position machine at starting corner before probing. Grid probes from current position.
-        </p>
-      </div>
-      <div id="autoGridInfo" style="display: none;">
-        <div class="info-box" id="boundsInfoBox"><strong>G-code Bounds:</strong> <span id="boundsInfoText">No G-code loaded</span></div>
-      </div>
-    </div>
-
-    <div class="form-section">
-      <div class="form-section-title">Probe Settings</div>
-      <div class="form-row">
-        <div class="form-group">
-          <label id="labelProbeFeed">Probe Feed Rate (mm/min)</label>
-          <input type="number" id="probeFeedRate" value="100" min="1" max="1000">
-        </div>
-        <div class="form-group">
-          <label id="labelTravelFeed">Travel Feed Rate (mm/min)</label>
-          <input type="number" id="travelFeedRate" value="2000" min="100" max="5000">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label id="labelClearance">Clearance Height (mm)</label>
-          <input type="number" id="clearanceHeight" value="5" min="1" step="0.5">
-        </div>
-        <div class="form-group">
-          <label id="labelMaxPlunge">Max Plunge (mm)</label>
-          <input type="number" id="maxPlunge" value="20" min="1" step="0.1">
+        <div class="form-row">
+          <div class="form-group">
+            <label id="labelClearance">Clearance Height</label>
+            <input type="number" id="clearanceHeight" value="5" min="1" step="0.5">
+          </div>
+          <div class="form-group">
+            <label id="labelMaxPlunge">Max Plunge</label>
+            <input type="number" id="maxPlunge" value="20" min="1" step="0.1">
+          </div>
         </div>
       </div>
     </div>
 
-    <div class="info-box" id="meshStatusBox">
-      <div class="mesh-status">
-        <div class="status-dot" id="meshStatusDot"></div>
-        <span id="meshStatusText">Checking mesh status...</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- Probe Tab -->
-  <div class="mesh-panel" id="panel-probe">
-    <div class="info-box warning">
-      <strong>Before Probing:</strong>
-      <ul style="margin: 8px 0 0 20px; padding: 0;">
-        <li>Ensure probe is connected and working</li>
-        <li>Position spindle at the starting corner above the work</li>
-        <li>Safe probing uses G38.3 for lateral moves, G1 for Z retracts</li>
-        <li>Curved surfaces detected via lateral probe checks</li>
-      </ul>
-    </div>
-
-    <div class="form-section">
-      <div class="form-section-title">Probe Progress</div>
+    <div class="form-card">
+      <div class="form-card-title">Probe Progress</div>
       <div class="probe-progress" id="probeProgress">
         <div id="probeStatus">Click "Start Probing" to begin mesh probing sequence</div>
+        <p style="font-size: 0.8rem; color: var(--color-text-secondary); margin: 8px 0 0 0;">Ensure probe is connected. Position spindle at starting corner above the work.</p>
         <div class="progress-bar" style="display: none;" id="progressBarContainer">
           <div class="progress-fill" id="progressFill" style="width: 0%"></div>
         </div>
         <div id="probeStats" style="margin-top: 10px; font-size: 0.85rem; color: var(--color-text-secondary);"></div>
       </div>
+      <div style="display: flex; justify-content: center; gap: 10px; margin-top: 16px;">
+        <button class="btn btn-primary" id="startProbeBtn">Start Probing</button>
+        <button class="btn btn-danger" id="stopProbeBtn" style="display: none;">Stop</button>
+      </div>
     </div>
 
-    <div class="button-row inline">
-      <button class="btn btn-primary" id="startProbeBtn">Start Probing</button>
-      <button class="btn btn-danger" id="stopProbeBtn" style="display: none;">Stop</button>
-    </div>
   </div>
 
   <!-- Mesh Data Tab -->
@@ -171,48 +481,43 @@
       </div>
     </div>
 
-    <div class="form-section">
-      <div class="form-section-title">Mesh Data</div>
-      <div id="meshDataDisplay" style="max-height: 300px; overflow: auto;">
-        <p style="text-align: center; color: var(--color-text-secondary);">No mesh data available</p>
+    <div class="mesh-visualizer-container" id="meshVizContainer">
+      <div class="mesh-canvas-empty" id="meshCanvasEmpty">No mesh data to visualize</div>
+      <canvas class="mesh-canvas" id="meshCanvas" width="760" height="380" style="display: none;"></canvas>
+      <div class="mesh-viz-hint" id="meshVizHint" style="display: none;">Drag to rotate</div>
+      <div class="mesh-legend" id="meshLegend" style="display: none;">
+        <div class="mesh-legend-bar"></div>
+        <div class="mesh-legend-labels">
+          <span id="legendMin">-</span>
+          <span id="legendMax">-</span>
+        </div>
       </div>
     </div>
 
-    <div id="meshStatsDisplay" class="info-box" style="display: none;"></div>
+    <div class="form-card">
+      <div class="form-card-title">Current Mesh</div>
+      <div id="meshDataDisplay" style="max-height: 150px; overflow: auto;">
+        <p style="text-align: center; color: var(--color-text-secondary);">No mesh data available</p>
+      </div>
+      <div id="meshStatsDisplay" class="info-box" style="display: none; margin-top: 10px;"></div>
+      <div style="display: flex; gap: 8px; margin-top: 12px; align-items: center;">
+        <input type="text" id="meshSaveName" placeholder="Mesh name (e.g. Guitar Body Top)" style="flex: 1; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 4px; font-size: 0.9rem; background: var(--color-surface); color: var(--color-text-primary);">
+        <button class="btn btn-primary" id="saveMeshBtn" disabled style="white-space: nowrap; padding: 6px 16px; border-radius: 4px;">Rename</button>
+        <button class="btn btn-success" id="applyCompensationBtn" disabled style="white-space: nowrap; padding: 6px 16px; border-radius: 4px;">Apply</button>
+      </div>
+    </div>
 
-    <div class="button-row inline">
-      <button class="btn btn-secondary" id="saveMeshBtn" disabled>Save Mesh</button>
-      <button class="btn btn-secondary" id="loadMeshBtn">Load Mesh</button>
-      <button class="btn btn-secondary" id="clearMeshBtn" disabled>Clear</button>
+    <div class="form-card">
+      <div class="form-card-title">Saved Meshes</div>
+      <div id="savedMeshesList">
+        <p style="text-align: center; color: var(--color-text-secondary); padding: 10px 0;">No saved meshes</p>
+      </div>
     </div>
   </div>
 
   <!-- Apply Tab -->
-  <div class="mesh-panel" id="panel-apply">
-    <div class="info-box" id="applyStatusBox">
-      <span id="applyStatusText">Checking requirements...</span>
-    </div>
 
-    <div class="form-section">
-      <div class="form-section-title">Compensation Settings</div>
-      <div class="form-row">
-        <div class="form-group">
-          <label id="labelRefZ">Reference Z (mm)</label>
-          <input type="number" id="referenceZ" value="0" step="0.001">
-        </div>
-        <div class="form-group">
-          <label>Source File</label>
-          <input type="text" id="sourceFileInput" value="No file loaded" disabled>
-        </div>
-      </div>
-    </div>
-
-    <div class="button-row inline">
-      <button class="btn btn-success" id="applyCompensationBtn" disabled>Apply Z Compensation</button>
-    </div>
-  </div>
-
-  <div class="button-row">
+  <div class="plugin-dialog-footer">
     <button class="btn btn-secondary" onclick="window.postMessage({ type: 'close-plugin-dialog' }, '*')">Close</button>
     <button class="btn btn-primary" id="saveSettingsBtn">Save Settings</button>
   </div>
@@ -244,12 +549,26 @@
   var isProbing = false;
   var stopProbing = false;
 
+  // 3D visualizer state
+  var vizRotX = -0.6;
+  var vizRotZ = 0.8;
+  var vizDragging = false;
+  var vizLastX = 0;
+  var vizLastY = 0;
+
   // --- API helpers ---
-  function saveSettings(settings) {
-    return fetch(API_BASE + '/api/plugins/com.ncsender.3dmesh/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings)
+  function saveSettings(newSettings) {
+    // Load existing settings first, merge, then save (PUT replaces entire config)
+    return loadSettings().then(function(existing) {
+      var merged = existing || {};
+      for (var key in newSettings) {
+        merged[key] = newSettings[key];
+      }
+      return fetch(API_BASE + '/api/plugins/com.ncsender.3dmesh/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(merged)
+      });
     });
   }
 
@@ -316,6 +635,24 @@
       toast.classList.add('fadeOut');
       setTimeout(function() { toast.remove(); }, 300);
     }, duration);
+  }
+
+  function showConfirm(title, message, onConfirm) {
+    var overlay = document.createElement('div');
+    overlay.className = 'confirm-overlay';
+    overlay.innerHTML =
+      '<div class="confirm-box">' +
+        '<div class="confirm-title">' + title + '</div>' +
+        '<div class="confirm-message">' + message + '</div>' +
+        '<div class="confirm-actions">' +
+          '<button class="btn btn-secondary" id="confirmCancelBtn">Cancel</button>' +
+          '<button class="btn btn-danger" id="confirmOkBtn">Confirm</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#confirmCancelBtn').onclick = function() { overlay.remove(); };
+    overlay.querySelector('#confirmOkBtn').onclick = function() { overlay.remove(); onConfirm(); };
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
   }
 
   // --- G-code analysis ---
@@ -657,68 +994,357 @@
     });
   }
 
+  // --- 3D Mesh Visualizer ---
+  function zToColor(z, minZ, maxZ) {
+    var range = maxZ - minZ;
+    if (range === 0) return 'rgb(76, 175, 80)';
+    var t = (z - minZ) / range;
+    var r, g, b;
+    if (t < 0.33) {
+      // blue to green
+      var s = t / 0.33;
+      r = Math.round(33 * (1 - s) + 76 * s);
+      g = Math.round(150 * (1 - s) + 175 * s);
+      b = Math.round(243 * (1 - s) + 80 * s);
+    } else if (t < 0.66) {
+      // green to orange
+      var s = (t - 0.33) / 0.33;
+      r = Math.round(76 * (1 - s) + 255 * s);
+      g = Math.round(175 * (1 - s) + 152 * s);
+      b = Math.round(80 * (1 - s) + 0 * s);
+    } else {
+      // orange to red
+      var s = (t - 0.66) / 0.34;
+      r = Math.round(255 * (1 - s) + 244 * s);
+      g = Math.round(152 * (1 - s) + 67 * s);
+      b = Math.round(0 * (1 - s) + 54 * s);
+    }
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+
+  function project3D(x, y, z, cx, cy, scale) {
+    // Rotate around Z axis
+    var cosZ = Math.cos(vizRotZ);
+    var sinZ = Math.sin(vizRotZ);
+    var rx = x * cosZ - y * sinZ;
+    var ry = x * sinZ + y * cosZ;
+    var rz = z;
+
+    // Rotate around X axis (tilt)
+    var cosX = Math.cos(vizRotX);
+    var sinX = Math.sin(vizRotX);
+    var ry2 = ry * cosX - rz * sinX;
+    var rz2 = ry * sinX + rz * cosX;
+
+    // Simple orthographic projection
+    var px = cx + rx * scale;
+    var py = cy - rz2 * scale;
+    return { x: px, y: py, depth: ry2 };
+  }
+
+  function renderMesh3D() {
+    var canvas = document.getElementById('meshCanvas');
+    var emptyEl = document.getElementById('meshCanvasEmpty');
+    var hintEl = document.getElementById('meshVizHint');
+    var legendEl = document.getElementById('meshLegend');
+
+    if (!meshData || !meshData.mesh || !meshData.gridParams) {
+      canvas.style.display = 'none';
+      emptyEl.style.display = 'flex';
+      hintEl.style.display = 'none';
+      legendEl.style.display = 'none';
+      return;
+    }
+
+    canvas.style.display = 'block';
+    emptyEl.style.display = 'none';
+    hintEl.style.display = 'block';
+    legendEl.style.display = 'flex';
+
+    var ctx = canvas.getContext('2d');
+    var w = canvas.width;
+    var h = canvas.height;
+    var mesh = meshData.mesh;
+    var gp = meshData.gridParams;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // Find Z bounds
+    var minZ = Infinity, maxZ = -Infinity;
+    for (var r = 0; r < mesh.length; r++) {
+      for (var c = 0; c < mesh[r].length; c++) {
+        var pt = mesh[r][c];
+        if (pt && typeof pt.z === 'number') {
+          if (pt.z < minZ) minZ = pt.z;
+          if (pt.z > maxZ) maxZ = pt.z;
+        }
+      }
+    }
+    if (minZ === Infinity) { minZ = 0; maxZ = 0; }
+
+    // Update legend
+    document.getElementById('legendMin').textContent = convertToDisplay(minZ).toFixed(3);
+    document.getElementById('legendMax').textContent = convertToDisplay(maxZ).toFixed(3);
+
+    // Normalize coordinates to [-1, 1] range
+    var rangeX = (gp.cols > 1) ? (gp.cols - 1) * gp.spacingX : 1;
+    var rangeY = (gp.rows > 1) ? (gp.rows - 1) * gp.spacingY : 1;
+    var rangeZ = (maxZ - minZ) || 1;
+    var maxRange = Math.max(rangeX, rangeY);
+    var zScale = Math.min(rangeX, rangeY) * 0.5; // exaggerate Z for visibility
+    if (rangeZ < maxRange * 0.01) zScale = maxRange * 0.3; // even more exaggeration for flat surfaces
+
+    var cx = w / 2;
+    var cy = h / 2;
+    var scale = Math.min(w, h) * 0.32;
+
+    // Build projected points
+    var points = [];
+    for (var r = 0; r < gp.rows; r++) {
+      points[r] = [];
+      for (var c = 0; c < gp.cols; c++) {
+        var pt = mesh[r] && mesh[r][c];
+        var z = (pt && typeof pt.z === 'number') ? pt.z : 0;
+        // Normalize to [-1, 1]
+        var nx = (gp.cols > 1) ? ((c / (gp.cols - 1)) * 2 - 1) : 0;
+        var ny = (gp.rows > 1) ? ((r / (gp.rows - 1)) * 2 - 1) : 0;
+        var nz = (rangeZ > 0) ? ((z - minZ) / rangeZ * 2 - 1) * (zScale / maxRange) : 0;
+
+        var proj = project3D(nx, ny, nz, cx, cy, scale);
+        points[r][c] = { px: proj.x, py: proj.y, depth: proj.depth, z: z };
+      }
+    }
+
+    // Draw reference grid on XY plane (Z=min)
+    var nzFloor = -1 * (zScale / maxRange);
+    var gridLines = 5;
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    for (var gi = 0; gi <= gridLines; gi++) {
+      var gt = gi / gridLines * 2 - 1;
+      // Lines parallel to X
+      var gA = project3D(gt, -1, nzFloor, cx, cy, scale);
+      var gB = project3D(gt, 1, nzFloor, cx, cy, scale);
+      ctx.beginPath(); ctx.moveTo(gA.x, gA.y); ctx.lineTo(gB.x, gB.y); ctx.stroke();
+      // Lines parallel to Y
+      gA = project3D(-1, gt, nzFloor, cx, cy, scale);
+      gB = project3D(1, gt, nzFloor, cx, cy, scale);
+      ctx.beginPath(); ctx.moveTo(gA.x, gA.y); ctx.lineTo(gB.x, gB.y); ctx.stroke();
+    }
+
+    // Draw side grid on XZ plane (Y=-1, left wall)
+    var nzTop = 1 * (zScale / maxRange);
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    for (var gi = 0; gi <= gridLines; gi++) {
+      var gt = gi / gridLines * 2 - 1;
+      var gz = nzFloor + (nzTop - nzFloor) * (gi / gridLines);
+      // Horizontal lines (constant Z)
+      var gA = project3D(-1, -1, gz, cx, cy, scale);
+      var gB = project3D(1, -1, gz, cx, cy, scale);
+      ctx.beginPath(); ctx.moveTo(gA.x, gA.y); ctx.lineTo(gB.x, gB.y); ctx.stroke();
+      // Vertical lines (constant X)
+      gA = project3D(gt, -1, nzFloor, cx, cy, scale);
+      gB = project3D(gt, -1, nzTop, cx, cy, scale);
+      ctx.beginPath(); ctx.moveTo(gA.x, gA.y); ctx.lineTo(gB.x, gB.y); ctx.stroke();
+    }
+
+    // Draw side grid on YZ plane (X=-1, right wall)
+    for (var gi = 0; gi <= gridLines; gi++) {
+      var gt = gi / gridLines * 2 - 1;
+      var gz = nzFloor + (nzTop - nzFloor) * (gi / gridLines);
+      // Horizontal lines (constant Z)
+      var gA = project3D(-1, -1, gz, cx, cy, scale);
+      var gB = project3D(-1, 1, gz, cx, cy, scale);
+      ctx.beginPath(); ctx.moveTo(gA.x, gA.y); ctx.lineTo(gB.x, gB.y); ctx.stroke();
+      // Vertical lines (constant Y)
+      gA = project3D(-1, gt, nzFloor, cx, cy, scale);
+      gB = project3D(-1, gt, nzTop, cx, cy, scale);
+      ctx.beginPath(); ctx.moveTo(gA.x, gA.y); ctx.lineTo(gB.x, gB.y); ctx.stroke();
+    }
+
+    // Draw X, Y, Z axes
+    var axisLen = 1.2;
+    var origin = project3D(-1, -1, nzFloor, cx, cy, scale);
+
+    // X axis (red)
+    var xEnd = project3D(-1 + axisLen, -1, nzFloor, cx, cy, scale);
+    ctx.beginPath(); ctx.moveTo(origin.x, origin.y); ctx.lineTo(xEnd.x, xEnd.y);
+    ctx.strokeStyle = '#f44336'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#f44336'; ctx.font = 'bold 12px sans-serif';
+    ctx.fillText('X', xEnd.x + 4, xEnd.y + 4);
+
+    // Y axis (green)
+    var yEnd = project3D(-1, -1 + axisLen, nzFloor, cx, cy, scale);
+    ctx.beginPath(); ctx.moveTo(origin.x, origin.y); ctx.lineTo(yEnd.x, yEnd.y);
+    ctx.strokeStyle = '#4caf50'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#4caf50'; ctx.font = 'bold 12px sans-serif';
+    ctx.fillText('Y', yEnd.x + 4, yEnd.y + 4);
+
+    // Z axis (blue)
+    var zTop = (1) * (zScale / maxRange);
+    var zEnd = project3D(-1, -1, zTop + 0.3, cx, cy, scale);
+    ctx.beginPath(); ctx.moveTo(origin.x, origin.y); ctx.lineTo(zEnd.x, zEnd.y);
+    ctx.strokeStyle = '#2196f3'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#2196f3'; ctx.font = 'bold 12px sans-serif';
+    ctx.fillText('Z', zEnd.x + 4, zEnd.y - 4);
+
+    // Dimension labels
+    ctx.font = '10px sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    var xSize = convertToDisplay(rangeX).toFixed(1) + distanceUnit;
+    var ySize = convertToDisplay(rangeY).toFixed(1) + distanceUnit;
+    var xMid = project3D(0, -1, nzFloor, cx, cy, scale);
+    var yMid = project3D(-1, 0, nzFloor, cx, cy, scale);
+    ctx.fillText(xSize, xMid.x - 15, xMid.y + 14);
+    ctx.fillText(ySize, yMid.x - 30, yMid.y);
+
+    // Draw filled quads with depth sorting
+    var quads = [];
+    for (var r = 0; r < gp.rows - 1; r++) {
+      for (var c = 0; c < gp.cols - 1; c++) {
+        var p00 = points[r][c];
+        var p10 = points[r][c + 1];
+        var p01 = points[r + 1][c];
+        var p11 = points[r + 1][c + 1];
+        var avgDepth = (p00.depth + p10.depth + p01.depth + p11.depth) / 4;
+        var avgZ = (p00.z + p10.z + p01.z + p11.z) / 4;
+        quads.push({ r: r, c: c, depth: avgDepth, avgZ: avgZ, p00: p00, p10: p10, p01: p01, p11: p11 });
+      }
+    }
+
+    // Sort back to front
+    quads.sort(function(a, b) { return a.depth - b.depth; });
+
+    // Draw quads
+    for (var q = 0; q < quads.length; q++) {
+      var quad = quads[q];
+      var fillColor = zToColor(quad.avgZ, minZ, maxZ);
+
+      ctx.beginPath();
+      ctx.moveTo(quad.p00.px, quad.p00.py);
+      ctx.lineTo(quad.p10.px, quad.p10.py);
+      ctx.lineTo(quad.p11.px, quad.p11.py);
+      ctx.lineTo(quad.p01.px, quad.p01.py);
+      ctx.closePath();
+
+      ctx.fillStyle = fillColor;
+      ctx.globalAlpha = 0.7;
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Draw wireframe on top
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 1;
+
+    // Row lines
+    for (var r = 0; r < gp.rows; r++) {
+      ctx.beginPath();
+      for (var c = 0; c < gp.cols; c++) {
+        var p = points[r][c];
+        if (c === 0) ctx.moveTo(p.px, p.py);
+        else ctx.lineTo(p.px, p.py);
+      }
+      ctx.stroke();
+    }
+
+    // Column lines
+    for (var c = 0; c < gp.cols; c++) {
+      ctx.beginPath();
+      for (var r = 0; r < gp.rows; r++) {
+        var p = points[r][c];
+        if (r === 0) ctx.moveTo(p.px, p.py);
+        else ctx.lineTo(p.px, p.py);
+      }
+      ctx.stroke();
+    }
+
+    // Draw vertices
+    for (var r = 0; r < gp.rows; r++) {
+      for (var c = 0; c < gp.cols; c++) {
+        var p = points[r][c];
+        var color = zToColor(p.z, minZ, maxZ);
+        ctx.beginPath();
+        ctx.arc(p.px, p.py, 3, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Canvas drag rotation
+  (function() {
+    var canvas = document.getElementById('meshCanvas');
+
+    canvas.addEventListener('mousedown', function(e) {
+      vizDragging = true;
+      vizLastX = e.clientX;
+      vizLastY = e.clientY;
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', function(e) {
+      if (!vizDragging) return;
+      var dx = e.clientX - vizLastX;
+      var dy = e.clientY - vizLastY;
+      vizRotZ += dx * 0.01;
+      vizRotX += dy * 0.01;
+      // Clamp tilt
+      vizRotX = Math.max(-Math.PI / 2, Math.min(0.1, vizRotX));
+      vizLastX = e.clientX;
+      vizLastY = e.clientY;
+      renderMesh3D();
+    });
+
+    document.addEventListener('mouseup', function() {
+      vizDragging = false;
+    });
+  })();
+
   // --- UI update functions ---
   function updateUnitLabels() {
-    document.getElementById('labelSizeX').textContent = 'Size X (' + distanceUnit + ')';
-    document.getElementById('labelSizeY').textContent = 'Size Y (' + distanceUnit + ')';
-    document.getElementById('labelProbeFeed').textContent = 'Probe Feed Rate (' + feedUnit + ')';
-    document.getElementById('labelTravelFeed').textContent = 'Travel Feed Rate (' + feedUnit + ')';
-    document.getElementById('labelClearance').textContent = 'Clearance Height (' + distanceUnit + ')';
-    document.getElementById('labelMaxPlunge').textContent = 'Max Plunge (' + distanceUnit + ')';
-    document.getElementById('labelRefZ').textContent = 'Reference Z (' + distanceUnit + ')';
+    var badge = isImperial ? 'in' : 'mm';
+    var badgeEls = ['unitBadge', 'unitBadgeGrid'];
+    for (var i = 0; i < badgeEls.length; i++) {
+      var el = document.getElementById(badgeEls[i]);
+      if (el) el.textContent = badge;
+    }
   }
 
   function updateMeshStatus() {
     var hasMesh = meshData && meshData.mesh && meshData.gridParams;
-    var statusDot = document.getElementById('meshStatusDot');
-    var statusText = document.getElementById('meshStatusText');
-    var statusBox = document.getElementById('meshStatusBox');
     var statusDot2 = document.getElementById('meshStatusDot2');
     var statusText2 = document.getElementById('meshStatusText2');
 
     if (hasMesh) {
-      statusDot.classList.add('active');
       if (statusDot2) statusDot2.classList.add('active');
       var msg = 'Mesh data loaded (' + meshData.gridParams.cols + 'x' + meshData.gridParams.rows + ' points)';
-      statusText.textContent = msg;
       if (statusText2) statusText2.textContent = msg;
-      statusBox.classList.add('success');
       document.getElementById('saveMeshBtn').disabled = false;
-      document.getElementById('clearMeshBtn').disabled = false;
     } else {
-      statusDot.classList.remove('active');
       if (statusDot2) statusDot2.classList.remove('active');
       var msg = 'No mesh data - run probing first';
-      statusText.textContent = msg;
       if (statusText2) statusText2.textContent = msg;
-      statusBox.classList.remove('success');
       document.getElementById('saveMeshBtn').disabled = true;
-      document.getElementById('clearMeshBtn').disabled = true;
     }
 
     updateApplyStatus();
     updateMeshDisplay();
+    renderMesh3D();
   }
 
   function updateApplyStatus() {
     var hasMesh = meshData && meshData.mesh && meshData.gridParams;
-    var statusBox = document.getElementById('applyStatusBox');
-    var statusText = document.getElementById('applyStatusText');
     var applyBtn = document.getElementById('applyCompensationBtn');
-
-    if (hasGcode && hasMesh) {
-      statusBox.classList.remove('warning');
-      statusBox.classList.add('success');
-      statusText.innerHTML = '<strong>Ready to apply:</strong> Mesh data and G-code loaded';
-      applyBtn.disabled = false;
-    } else {
-      statusBox.classList.remove('success');
-      statusBox.classList.add('warning');
-      statusText.innerHTML = '<strong>Requirements:</strong> ' +
-        (!hasGcode ? 'Load a G-code file' : '') +
-        (!hasGcode && !hasMesh ? ' and ' : '') +
-        (!hasMesh ? 'Run probing first' : '');
-      applyBtn.disabled = true;
+    if (applyBtn) {
+      applyBtn.disabled = !(hasGcode && hasMesh);
     }
   }
 
@@ -785,6 +1411,10 @@
       document.querySelectorAll('.mesh-panel').forEach(function(p) { p.classList.remove('active'); });
       tab.classList.add('active');
       document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+      // Re-render visualizer when switching to mesh tab
+      if (tab.dataset.tab === 'mesh') {
+        renderMesh3D();
+      }
     });
   });
 
@@ -814,7 +1444,7 @@
       travelFeedRate: parseFloat(document.getElementById('travelFeedRate').value),
       clearanceHeight: convertToMetric(parseFloat(document.getElementById('clearanceHeight').value)),
       maxPlunge: convertToMetric(parseFloat(document.getElementById('maxPlunge').value)),
-      referenceZ: convertToMetric(parseFloat(document.getElementById('referenceZ').value))
+      referenceZ: 0
     };
 
     // Preserve meshData in settings
@@ -866,6 +1496,15 @@
 
     isProbing = true;
     stopProbing = false;
+
+    // Disable all inputs and buttons except Stop
+    var allInputs = document.querySelectorAll('.mesh-dialog input, .mesh-dialog select, .mesh-dialog .btn');
+    for (var ii = 0; ii < allInputs.length; ii++) {
+      if (allInputs[ii].id !== 'stopProbeBtn') allInputs[ii].disabled = true;
+    }
+    // Disable tabs
+    var allTabs = document.querySelectorAll('.mesh-tab');
+    for (var ii = 0; ii < allTabs.length; ii++) allTabs[ii].style.pointerEvents = 'none';
 
     document.getElementById('startProbeBtn').style.display = 'none';
     document.getElementById('stopProbeBtn').style.display = 'inline-block';
@@ -1049,6 +1688,24 @@
 
         updateProgress('Probing complete! ' + totalPoints + ' points captured.');
         updateMeshStatus();
+        renderMesh3D();
+
+        // Auto-save with auto-generated name and ID
+        var autoName = 'Mesh ' + new Date().toLocaleString();
+        var autoId = generateId();
+        savedMeshes.push({
+          id: autoId,
+          name: autoName,
+          date: new Date().toISOString(),
+          mesh: meshData.mesh,
+          gridParams: meshData.gridParams
+        });
+        currentMeshId = autoId;
+        saveSettings({ savedMeshes: savedMeshes, meshData: meshData }).then(function() {
+          renderSavedMeshes();
+          showToast('Mesh auto-saved: ' + autoName, 'success');
+          document.getElementById('meshSaveName').value = autoName;
+        });
       } else if (stopProbing) {
         updateProgress('Probing stopped by user.');
       }
@@ -1058,6 +1715,13 @@
       isProbing = false;
       document.getElementById('startProbeBtn').style.display = 'inline-block';
       document.getElementById('stopProbeBtn').style.display = 'none';
+
+      // Re-enable all inputs and buttons
+      var allInputs = document.querySelectorAll('.mesh-dialog input, .mesh-dialog select, .mesh-dialog .btn');
+      for (var ii = 0; ii < allInputs.length; ii++) allInputs[ii].disabled = false;
+      // Re-enable tabs
+      var allTabs = document.querySelectorAll('.mesh-tab');
+      for (var ii = 0; ii < allTabs.length; ii++) allTabs[ii].style.pointerEvents = '';
     }
   });
 
@@ -1067,38 +1731,129 @@
   });
 
   // --- Save mesh ---
+  var savedMeshes = [];
+
+  var currentMeshId = null;
+
+  function generateId() {
+    return 'xxxxxxxx-xxxx-4xxx'.replace(/[x]/g, function() {
+      return (Math.random() * 16 | 0).toString(16);
+    });
+  }
+
+  function renderSavedMeshes() {
+    var list = document.getElementById('savedMeshesList');
+    if (savedMeshes.length === 0) {
+      list.innerHTML = '<p style="text-align: center; color: var(--color-text-secondary); padding: 10px 0;">No saved meshes</p>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < savedMeshes.length; i++) {
+      var m = savedMeshes[i];
+      if (!m.id) m.id = generateId();
+      var date = m.date ? new Date(m.date).toLocaleDateString() : '';
+      var grid = m.gridParams ? (m.gridParams.cols + 'x' + m.gridParams.rows) : '';
+      var isActive = currentMeshId === m.id;
+      html += '<div class="saved-mesh-item' + (isActive ? ' active' : '') + '">' +
+        '<div class="saved-mesh-info">' +
+          '<div class="saved-mesh-name">' + (m.name || 'Unnamed') + '</div>' +
+          '<div class="saved-mesh-meta">' + grid + ' grid &bull; ' + date + '</div>' +
+        '</div>' +
+        '<div class="saved-mesh-actions">' +
+          '<button class="btn btn-primary" onclick="loadSavedMesh(' + i + ')">Load</button>' +
+          '<button onclick="deleteSavedMesh(' + i + ')" title="Delete" style="all: unset; display: inline-block; background: #f44336; color: white; border-radius: 8px; padding: 10px 16px; font-size: 0.9rem; font-weight: 500; cursor: pointer; text-align: center;">X</button>' +
+        '</div>' +
+      '</div>';
+    }
+    list.innerHTML = html;
+  }
+
+  function loadSavedMeshList() {
+    loadSettings().then(function(settings) {
+      savedMeshes = (settings && settings.savedMeshes) || [];
+      // Backwards compat: if old single meshData exists, migrate it
+      if (savedMeshes.length === 0 && settings && settings.meshData) {
+        savedMeshes.push({
+          name: 'Imported mesh',
+          date: new Date().toISOString(),
+          mesh: settings.meshData.mesh,
+          gridParams: settings.meshData.gridParams
+        });
+      }
+      renderSavedMeshes();
+    }).catch(function() {
+      savedMeshes = [];
+      renderSavedMeshes();
+    });
+  }
+
+  window.loadSavedMesh = function(index) {
+    var m = savedMeshes[index];
+    if (!m) return;
+    meshData = { mesh: m.mesh, gridParams: m.gridParams };
+    currentMeshId = m.id;
+    document.getElementById('meshSaveName').value = m.name || '';
+    updateMeshStatus();
+    renderSavedMeshes();
+    showToast('Loaded: ' + (m.name || 'Unnamed'), 'success');
+  };
+
+  window.deleteSavedMesh = function(index) {
+    var m = savedMeshes[index];
+    showConfirm('Delete Mesh', 'Are you sure you want to delete "' + (m.name || 'Unnamed') + '"?', function() {
+      savedMeshes.splice(index, 1);
+      saveSettings({ savedMeshes: savedMeshes }).then(function() {
+        renderSavedMeshes();
+        showToast('Mesh deleted', 'info');
+      });
+    });
+  };
+
+  // --- Save/rename current mesh ---
   document.getElementById('saveMeshBtn').addEventListener('click', function() {
     if (!meshData) return;
-    saveSettings({ meshData: meshData }).then(function() {
-      showToast('Mesh saved!', 'success');
-    }).catch(function(err) {
-      showToast('Failed to save mesh: ' + err.message, 'error');
-    });
-  });
-
-  // --- Load mesh ---
-  document.getElementById('loadMeshBtn').addEventListener('click', function() {
-    loadSettings().then(function(settings) {
-      if (settings && settings.meshData) {
-        meshData = settings.meshData;
-        updateMeshStatus();
-        showToast('Mesh loaded!', 'success');
-      } else {
-        showToast('No saved mesh found', 'info');
-      }
-    }).catch(function(err) {
-      showToast('Failed to load mesh: ' + err.message, 'error');
-    });
-  });
-
-  // --- Clear mesh ---
-  document.getElementById('clearMeshBtn').addEventListener('click', function() {
-    if (confirm('Clear mesh data?')) {
-      meshData = null;
-      updateMeshStatus();
+    var name = document.getElementById('meshSaveName').value.trim();
+    if (!name) {
+      showToast('Enter a name for the mesh', 'error');
+      document.getElementById('meshSaveName').focus();
+      return;
     }
+
+    // Check if updating existing mesh (rename/update)
+    var existingIndex = -1;
+    if (currentMeshId) {
+      for (var i = 0; i < savedMeshes.length; i++) {
+        if (savedMeshes[i].id === currentMeshId) { existingIndex = i; break; }
+      }
+    }
+
+    if (existingIndex >= 0) {
+      // Update existing mesh (rename + update data)
+      savedMeshes[existingIndex].name = name;
+      savedMeshes[existingIndex].mesh = meshData.mesh;
+      savedMeshes[existingIndex].gridParams = meshData.gridParams;
+    } else {
+      // New mesh
+      var newId = generateId();
+      savedMeshes.push({
+        id: newId,
+        name: name,
+        date: new Date().toISOString(),
+        mesh: meshData.mesh,
+        gridParams: meshData.gridParams
+      });
+      currentMeshId = newId;
+    }
+
+    saveSettings({ savedMeshes: savedMeshes, meshData: meshData }).then(function() {
+      renderSavedMeshes();
+      showToast('Mesh saved: ' + name, 'success');
+    }).catch(function(err) {
+      showToast('Failed to save: ' + err.message, 'error');
+    });
   });
 
+  // --- Clear current mesh ---
   // --- Apply compensation (client-side) ---
   document.getElementById('applyCompensationBtn').addEventListener('click', function() {
     if (!meshData) {
@@ -1106,7 +1861,7 @@
       return;
     }
 
-    var referenceZ = convertToMetric(parseFloat(document.getElementById('referenceZ').value));
+    var referenceZ = 0;
     var applyBtn = document.getElementById('applyCompensationBtn');
     applyBtn.disabled = true;
     applyBtn.textContent = 'Applying...';
@@ -1135,12 +1890,15 @@
       console.error('[3DMesh] Apply error:', error);
       showToast('Failed: ' + error.message, 'error');
       applyBtn.disabled = false;
-      applyBtn.textContent = 'Apply Z Compensation';
+      applyBtn.textContent = 'Apply';
     });
   });
 
   // --- Initialization ---
   function initialize() {
+    // Load saved meshes list
+    loadSavedMeshList();
+
     // Load app settings for units
     getAppSettings().then(function(appSettings) {
       var unitsPreference = (appSettings && appSettings.unitsPreference) || 'metric';
@@ -1160,7 +1918,6 @@
       if (s.travelFeedRate) document.getElementById('travelFeedRate').value = s.travelFeedRate;
       if (s.clearanceHeight) document.getElementById('clearanceHeight').value = convertToDisplay(s.clearanceHeight).toFixed(3);
       if (s.maxPlunge) document.getElementById('maxPlunge').value = convertToDisplay(s.maxPlunge).toFixed(3);
-      if (s.referenceZ != null) document.getElementById('referenceZ').value = convertToDisplay(s.referenceZ).toFixed(3);
 
       // Restore mesh from settings
       if (s.meshData) {
